@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:17
+    container_name: warehousehub
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: warehousehub
+      POSTGRES_PASSWORD: warehousehub
+      POSTGRES_DB: warehousehub
+    volumes:
+      - warehousehub:/var/lib/postgresql/data
+
+volumes:
+  warehousehub:
