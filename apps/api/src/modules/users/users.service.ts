@@ -6,25 +6,25 @@ import { Role } from '@prisma/client';
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findActiveUserByEmail(email: string) {
+  findActiveUserByEmail(companyId: string, email: string) {
     return this.prisma.user.findFirst({
-      where: { email, isActive: true },
-      include: { company: true },
+      where: { companyId, email, isActive: true },
     });
   }
 
   findUserById(userId: string) {
-    return this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { company: true },
-    });
+    return this.prisma.user.findUnique({ where: { id: userId } });
+  }
+
+  findCompanyByName(name: string) {
+    return this.prisma.company.findUnique({ where: { name } });
   }
 
   async createCompanyWithAdmin(params: {
     companyName: string;
-    email: string;
+    adminEmail: string;
+    adminName: string;
     passwordHash: string;
-    name: string;
   }) {
     const company = await this.prisma.company.create({
       data: { name: params.companyName },
@@ -33,19 +33,18 @@ export class UsersService {
     const user = await this.prisma.user.create({
       data: {
         companyId: company.id,
-        email: params.email,
+        email: params.adminEmail,
         passwordHash: params.passwordHash,
-        name: params.name,
+        name: params.adminName,
         role: Role.ADMIN,
         isActive: true,
       },
-      include: { company: true },
     });
 
     return { company, user };
   }
 
-  async deactivateUser(userId: string) {
+  deactivateUser(userId: string) {
     return this.prisma.user.update({
       where: { id: userId },
       data: { isActive: false },

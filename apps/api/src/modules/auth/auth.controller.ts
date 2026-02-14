@@ -23,7 +23,7 @@ export class AuthController {
   @Post('login')
   @ApiOkResponse({ type: LoginResponseDto })
   login(@Body() dto: LoginDto) {
-    return this.auth.login(dto.email, dto.password);
+    return this.auth.login(dto);
   }
 
   @Post('refresh')

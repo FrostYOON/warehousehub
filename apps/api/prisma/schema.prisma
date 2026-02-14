@@ -22,7 +22,7 @@ enum StorageType {
 
 model Company {
   id   String @id @default(uuid())
-  name String
+  name String @unique
 
   users      User[]
   warehouses Warehouse[]

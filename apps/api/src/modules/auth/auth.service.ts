@@ -1,11 +1,12 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
-import {
-  hashPassword,
-  comparePassword,
-} from '../../common/utils/password.util';
+import { hashPassword, comparePassword } from '../../common/utils/password.util';
 import {
   addDays,
   generateRefreshToken,
@@ -55,18 +56,22 @@ export class AuthService {
     name: string;
     password: string;
   }) {
+    const existingCompany = await this.users.findCompanyByName(dto.companyName);
+    if (existingCompany)
+      throw new BadRequestException('Company name already exists');
+
     const passwordHash = await hashPassword(dto.password);
 
-    const { user } = await this.users.createCompanyWithAdmin({
+    const { company, user } = await this.users.createCompanyWithAdmin({
       companyName: dto.companyName,
-      email: dto.email,
-      name: dto.name,
+      adminEmail: dto.email,
+      adminName: dto.name,
       passwordHash,
     });
 
     const accessToken = await this.issueAccessToken({
       userId: user.id,
-      companyId: user.companyId,
+      companyId: company.id,
       role: user.role,
     });
 
@@ -80,22 +85,25 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
-        companyId: user.companyId,
-        companyName: user.company.name,
+        companyId: company.id,
+        companyName: company.name,
       },
     };
   }
 
-  async login(email: string, password: string) {
-    const user = await this.users.findActiveUserByEmail(email);
+  async login(dto: { companyName: string; email: string; password: string }) {
+    const company = await this.users.findCompanyByName(dto.companyName);
+    if (!company) throw new UnauthorizedException('Invalid credentials');
+
+    const user = await this.users.findActiveUserByEmail(company.id, dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const ok = await comparePassword(password, user.passwordHash);
+    const ok = await comparePassword(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
 
     const accessToken = await this.issueAccessToken({
       userId: user.id,
-      companyId: user.companyId,
+      companyId: company.id,
       role: user.role,
     });
 
@@ -109,8 +117,8 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
-        companyId: user.companyId,
-        companyName: user.company.name,
+        companyId: company.id,
+        companyName: company.name,
       },
     };
   }
@@ -120,42 +128,36 @@ export class AuthService {
 
     const stored = await this.prisma.refreshToken.findFirst({
       where: { tokenHash, revokedAt: null },
+      include: { user: true },
     });
 
     if (!stored) throw new UnauthorizedException('Invalid refresh token');
     if (stored.expiresAt <= new Date())
       throw new UnauthorizedException('Refresh token expired');
+    if (!stored.user.isActive) throw new UnauthorizedException();
 
-    // Rotation: 기존 토큰 revoke 후 새 refresh 발급
+    // revoke old
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
       data: { revokedAt: new Date() },
     });
 
-    const user = await this.users.findUserById(stored.userId);
-    if (!user || !user.isActive) throw new UnauthorizedException();
-
-    const newAccessToken = await this.issueAccessToken({
-      userId: user.id,
-      companyId: user.companyId,
-      role: user.role,
+    const accessToken = await this.issueAccessToken({
+      userId: stored.userId,
+      companyId: stored.user.companyId,
+      role: stored.user.role,
     });
-    const newRefreshToken = await this.issueRefreshToken(user.id);
 
-    return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+    const newRefreshToken = await this.issueRefreshToken(stored.userId);
+
+    return { accessToken, refreshToken: newRefreshToken };
   }
 
   async logout(refreshToken: string) {
     const tokenHash = hashToken(refreshToken);
 
-    const stored = await this.prisma.refreshToken.findFirst({
+    await this.prisma.refreshToken.updateMany({
       where: { tokenHash, revokedAt: null },
-    });
-
-    if (!stored) return { ok: true }; // idempotent
-
-    await this.prisma.refreshToken.update({
-      where: { id: stored.id },
       data: { revokedAt: new Date() },
     });
 
@@ -166,25 +168,26 @@ export class AuthService {
     const user = await this.users.findUserById(userId);
     if (!user || !user.isActive) throw new UnauthorizedException();
 
+    const company = await this.prisma.company.findUnique({
+      where: { id: user.companyId },
+    });
+
     return {
       id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
       companyId: user.companyId,
-      companyName: user.company.name,
+      companyName: company?.name ?? null,
     };
   }
 
   async withdraw(userId: string) {
-    // MVP: 회원 탈퇴 = 비활성화(soft delete) + refresh 전부 revoke
     await this.users.deactivateUser(userId);
-
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
-
     return { ok: true };
   }
 }
