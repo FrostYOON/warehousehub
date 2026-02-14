@@ -21,31 +21,33 @@ enum StorageType {
 }
 
 model Company {
-  id        String   @id @default(uuid())
-  name      String
+  id   String @id @default(uuid())
+  name String
 
-  users     User[]
+  users      User[]
   warehouses Warehouse[]
-  items     Item[]
-  customers Customer[]
+  items      Item[]
+  customers  Customer[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model User {
-  id           String   @id @default(uuid())
-  companyId    String
-  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   email        String
   passwordHash String
   name         String
-  role         Role     @default(WH_MANAGER)
-  isActive     Boolean  @default(true)
+  role         Role    @default(WH_MANAGER)
+  isActive     Boolean @default(true)
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  refreshTokens RefreshToken[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([companyId, email])
   @@index([companyId])
@@ -53,12 +55,12 @@ model User {
 }
 
 model Warehouse {
-  id        String      @id @default(uuid())
+  id        String  @id @default(uuid())
   companyId String
-  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  type      StorageType
-  name      String
+  type StorageType
+  name String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -68,13 +70,13 @@ model Warehouse {
 }
 
 model Item {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  itemCode  String
-  itemName  String
-  isActive  Boolean  @default(true)
+  itemCode String
+  itemName String
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -85,19 +87,34 @@ model Item {
 }
 
 model Customer {
-  id              String   @id @default(uuid())
-  companyId        String
-  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  customerName     String
-  customerAddress  String
-  lat              Decimal? @db.Decimal(10, 7)
-  lng              Decimal? @db.Decimal(10, 7)
-  isActive         Boolean  @default(true)
+  customerName    String
+  customerAddress String
+  lat             Decimal? @db.Decimal(10, 7)
+  lng             Decimal? @db.Decimal(10, 7)
+  isActive        Boolean  @default(true)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([companyId])
   @@index([customerName])
+}
+
+model RefreshToken {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([tokenHash])
 }
