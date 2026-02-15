@@ -20,6 +20,22 @@ enum StorageType {
   FRZ
 }
 
+enum InventoryTxType {
+  INBOUND_CONFIRM // 입고 확정
+  OUTBOUND_CONFIRM // 출고 확정
+  PICK_RESERVE // 픽(예약/할당)
+  PICK_RELEASE // 픽 취소(예약 해제)
+  ADJUSTMENT // 재고 조정
+  RETURN_RESTOCK // 리턴(재입고)
+  RETURN_DISCARD // 리턴(폐기)
+}
+
+enum InboundUploadStatus {
+  UPLOADED
+  CONFIRMED
+  CANCELLED
+}
+
 model Company {
   id   String @id @default(uuid())
   name String @unique
@@ -29,8 +45,12 @@ model Company {
   items      Item[]
   customers  Customer[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  lots           Lot[]
+  stocks         Stock[]
+  inventoryTxes  InventoryTx[]
+  inboundUploads InboundUpload[]
 }
 
 model User {
@@ -46,8 +66,10 @@ model User {
 
   refreshTokens RefreshToken[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  inventoryTxes  InventoryTx[]
+  inboundUploads InboundUpload[]
 
   @@unique([companyId, email])
   @@index([companyId])
@@ -62,8 +84,10 @@ model Warehouse {
   type StorageType
   name String
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  stocks           Stock[]
+  inventoryTxLines InventoryTxLine[]
 
   @@unique([companyId, type])
   @@index([companyId])
@@ -80,6 +104,7 @@ model Item {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  lots      Lot[]
 
   @@unique([companyId, itemCode])
   @@index([companyId])
@@ -117,4 +142,128 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@index([tokenHash])
+}
+
+model Lot {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  // 유통기한 (없으면 null)
+  expiryDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stocks           Stock[]
+  inventoryTxLines InventoryTxLine[]
+
+  @@unique([companyId, itemId, expiryDate])
+  @@index([companyId, itemId])
+  @@index([companyId, expiryDate])
+}
+
+model Stock {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  lotId String
+  lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  onHand   Int @default(0)
+  reserved Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, warehouseId, lotId])
+  @@index([companyId, warehouseId])
+  @@index([companyId, lotId])
+}
+
+model InventoryTx {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  type InventoryTxType
+
+  actorUserId String?
+  actorUser   User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  refType String?
+  refId   String?
+  memo    String?
+
+  createdAt DateTime @default(now())
+
+  lines InventoryTxLine[]
+
+  @@index([companyId, type])
+  @@index([companyId, createdAt])
+}
+
+model InventoryTxLine {
+  id   String      @id @default(uuid())
+  txId String
+  tx   InventoryTx @relation(fields: [txId], references: [id], onDelete: Cascade)
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  lotId String
+  lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  qtyDelta Int
+
+  createdAt DateTime @default(now())
+
+  @@index([warehouseId])
+  @@index([lotId])
+}
+
+model InboundUpload {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  uploadedByUserId String?
+  uploadedByUser   User?   @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+
+  fileName    String
+  status      InboundUploadStatus @default(UPLOADED)
+  createdAt   DateTime            @default(now())
+  confirmedAt DateTime?
+
+  rows InboundUploadRow[]
+
+  @@index([companyId, status])
+  @@index([companyId, createdAt])
+}
+
+model InboundUploadRow {
+  id       String        @id @default(uuid())
+  uploadId String
+  upload   InboundUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  itemCode    String
+  itemName    String
+  storageType StorageType
+  quantity    Int
+  expiryDate  DateTime?
+
+  isValid      Boolean @default(true)
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([uploadId])
+  @@index([itemCode])
 }
