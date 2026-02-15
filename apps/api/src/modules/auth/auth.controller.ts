@@ -2,12 +2,14 @@ import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { LoginResponseDto, MeResponseDto } from './dto/auth.response.dto';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -56,5 +58,14 @@ export class AuthController {
   withdraw(@Req() req: Request) {
     const user = (req as any).user as { userId: string };
     return this.auth.withdraw(user.userId);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  @Get('admin-only')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ schema: { example: { ok: true } } })
+  adminOnly() {
+    return { ok: true };
   }
 }
