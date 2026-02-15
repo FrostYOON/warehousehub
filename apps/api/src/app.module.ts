@@ -8,6 +8,7 @@ import { UsersModule } from './modules/users/users.module';
 import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { InboundModule } from './modules/inbound/inbound.module';
 import { StocksModule } from './modules/stocks/stocks.module';
+import { OutboundModule } from './modules/outbound/outbound.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { StocksModule } from './modules/stocks/stocks.module';
     WarehousesModule,
     InboundModule,
     StocksModule,
+    OutboundModule,
   ],
   controllers: [AppController],
   providers: [AppService],
