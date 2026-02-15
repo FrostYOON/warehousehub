@@ -14,6 +14,7 @@ import {
   ApiConsumes,
   ApiOkResponse,
   ApiTags,
+  ApiBody,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
@@ -34,6 +35,15 @@ export class InboundController {
 
   @Post('uploads')
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+      required: ['file'],
+    },
+  })
   @UseInterceptors(FileInterceptor('file'))
   @ApiOkResponse({
     schema: { example: { id: 'uuid', invalidCount: 0 } },
@@ -55,5 +65,15 @@ export class InboundController {
   @ApiOkResponse({ type: InboundUploadResponse })
   get(@Req() req: Request, @Param('id') id: string) {
     return this.inbound.getUpload(req.user!.companyId, id);
+  }
+
+  @Post('uploads/:id/confirm')
+  @ApiOkResponse({ schema: { example: { ok: true } } })
+  confirm(@Req() req: Request, @Param('id') id: string) {
+    return this.inbound.confirmUpload({
+      companyId: req.user!.companyId,
+      uploadId: id,
+      actorUserId: req.user!.userId,
+    });
   }
 }
