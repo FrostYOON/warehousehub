@@ -44,10 +44,79 @@ export class UsersService {
     return { company, user };
   }
 
-  deactivateUser(userId: string) {
+  listUsersByCompany(companyId: string) {
+    return this.prisma.user.findMany({
+      where: { companyId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async createUser(params: {
+    companyId: string;
+    email: string;
+    name: string;
+    passwordHash: string;
+    role: Role;
+  }) {
+    return this.prisma.user.create({
+      data: {
+        companyId: params.companyId,
+        email: params.email,
+        name: params.name,
+        passwordHash: params.passwordHash,
+        role: params.role,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  updateRole(companyId: string, userId: string, role: Role) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { role },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  deactivate(companyId: string, userId: string) {
     return this.prisma.user.update({
       where: { id: userId },
       data: { isActive: false },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
   }
 }

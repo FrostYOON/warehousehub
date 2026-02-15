@@ -56,8 +56,8 @@ export class AuthController {
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ schema: { example: { ok: true } } })
   withdraw(@Req() req: Request) {
-    const user = (req as any).user as { userId: string };
-    return this.auth.withdraw(user.userId);
+    const user = (req as any).user as { companyId: string; userId: string };
+    return this.auth.withdraw(user.companyId, user.userId);
   }
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)

@@ -182,8 +182,8 @@ export class AuthService {
     };
   }
 
-  async withdraw(userId: string) {
-    await this.users.deactivateUser(userId);
+  async withdraw(companyId: string, userId: string) {
+    await this.users.deactivate(companyId, userId);
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
