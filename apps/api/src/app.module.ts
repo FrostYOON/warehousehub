@@ -8,6 +8,9 @@ import { UsersModule } from './modules/users/users.module';
 import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { InboundModule } from './modules/inbound/inbound.module';
 import { StocksModule } from './modules/stocks/stocks.module';
+import { CustomersController } from './modules/customers/customers.controller';
+import { CustomersService } from './modules/customers/customers.service';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -21,8 +24,9 @@ import { StocksModule } from './modules/stocks/stocks.module';
     WarehousesModule,
     InboundModule,
     StocksModule,
+    CustomersModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  controllers: [AppController, CustomersController],
+  providers: [AppService, CustomersService],
 })
 export class AppModule {}
