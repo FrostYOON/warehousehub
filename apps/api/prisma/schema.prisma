@@ -6,6 +6,12 @@ datasource db {
   provider = "postgresql"
 }
 
+/// 사용자 권한
+/// - ADMIN: 회사 전체 관리자
+/// - WH_MANAGER: 창고 관리자 (입고/출고/조정 가능)
+/// - DELIVERY: 배송 담당자 (배송 확인/출고 검토)
+/// - ACCOUNTING: 회계 담당자 (재고 조회)
+/// - SALES: 영업 담당자 (재고/출고 조회)
 enum Role {
   ADMIN
   WH_MANAGER
@@ -14,28 +20,48 @@ enum Role {
   SALES
 }
 
+/// 창고 타입 (회사당 DRY/COOL/FRZ 1개씩 존재)
 enum StorageType {
-  DRY
-  COOL
-  FRZ
+  DRY // 상온
+  COOL // 냉장
+  FRZ // 냉동
 }
 
+/// 재고 원장 트랜잭션 유형
+/// 모든 재고 증감은 이 테이블에 기록됨 (Audit Trail 목적)
 enum InventoryTxType {
-  INBOUND_CONFIRM // 입고 확정
-  OUTBOUND_CONFIRM // 출고 확정
-  PICK_RESERVE // 픽(예약/할당)
-  PICK_RELEASE // 픽 취소(예약 해제)
-  ADJUSTMENT // 재고 조정
-  RETURN_RESTOCK // 리턴(재입고)
-  RETURN_DISCARD // 리턴(폐기)
+  INBOUND_CONFIRM // 입고 확정 (onHand 증가)
+  OUTBOUND_CONFIRM // 출고 확정 (onHand 감소)
+  PICK_RESERVE // 픽 예약 (reserved 증가)
+  PICK_RELEASE // 픽 취소 (reserved 감소)
+  ADJUSTMENT // 관리자 수량 조정
+  RETURN_RESTOCK // 리턴 재입고
+  RETURN_DISCARD // 리턴 폐기
 }
 
+/// 엑셀 입고 업로드 상태
 enum InboundUploadStatus {
   UPLOADED
   CONFIRMED
   CANCELLED
 }
 
+/// 출고 오더 상태
+enum OutboundStatus {
+  DRAFT // 생성만 된 상태
+  PICKING // 픽 진행 중 (예약 발생)
+  CONFIRMED // 출고 확정 (재고 차감)
+  CANCELLED // 전체 취소
+}
+
+/// 출고 라인 상태
+enum OutboundLineStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// 하나의 회사(테넌트)
+/// 모든 데이터는 companyId 기준으로 격리됨
 model Company {
   id   String @id @default(uuid())
   name String @unique
@@ -45,14 +71,20 @@ model Company {
   items      Item[]
   customers  Customer[]
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  // 재고 도메인
   lots           Lot[]
   stocks         Stock[]
   inventoryTxes  InventoryTx[]
   inboundUploads InboundUpload[]
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  outboundOrders  OutboundOrder[]
+  pickAllocations PickAllocation[]
 }
 
+/// 회사 소속 사용자
+/// 권한(Role)에 따라 기능 접근 제어
 model User {
   id        String  @id @default(uuid())
   companyId String
@@ -66,16 +98,25 @@ model User {
 
   refreshTokens RefreshToken[]
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  inventoryTxes  InventoryTx[]
+  /// 이 사용자가 발생시킨 재고 트랜잭션
+  inventoryTxes InventoryTx[]
+
+  /// 이 사용자가 업로드한 입고 엑셀
   inboundUploads InboundUpload[]
 
+  outboundOrders OutboundOrder[]
+
+  createdOutboundOrders   OutboundOrder[] @relation("OutboundCreatedBy")
+  confirmedOutboundOrders OutboundOrder[] @relation("OutboundConfirmedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([companyId, email])
-  @@index([companyId])
-  @@index([role])
 }
 
+/// 회사 내 창고
+/// 회사당 DRY/COOL/FRZ 각각 1개
 model Warehouse {
   id        String  @id @default(uuid())
   companyId String
@@ -84,15 +125,18 @@ model Warehouse {
   type StorageType
   name String
 
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
   stocks           Stock[]
   inventoryTxLines InventoryTxLine[]
 
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  pickAllocations PickAllocation[]
+
   @@unique([companyId, type])
-  @@index([companyId])
 }
 
+/// 상품 마스터
+/// 동일 회사 내 itemCode는 유니크
 model Item {
   id        String  @id @default(uuid())
   companyId String
@@ -102,13 +146,13 @@ model Item {
   itemName String
   isActive Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  lots      Lot[]
+  lots Lot[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  outboundLines OutboundLine[]
 
   @@unique([companyId, itemCode])
-  @@index([companyId])
-  @@index([itemCode])
 }
 
 model Customer {
@@ -122,8 +166,9 @@ model Customer {
   lng             Decimal? @db.Decimal(10, 7)
   isActive        Boolean  @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  outboundOrders OutboundOrder[]
 
   @@index([companyId])
   @@index([customerName])
@@ -144,6 +189,8 @@ model RefreshToken {
   @@index([tokenHash])
 }
 
+/// 유통기한 단위 재고 그룹
+/// expiryDate = null → 유통기한 없음 (쌀/김치 등)
 model Lot {
   id        String  @id @default(uuid())
   companyId String
@@ -152,20 +199,21 @@ model Lot {
   itemId String
   item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
-  // 유통기한 (없으면 null)
-  expiryDate DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  expiryDate DateTime? // null 가능
 
   stocks           Stock[]
   inventoryTxLines InventoryTxLine[]
 
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  pickAllocations PickAllocation[]
+
   @@unique([companyId, itemId, expiryDate])
-  @@index([companyId, itemId])
-  @@index([companyId, expiryDate])
 }
 
+/// 창고 + Lot 단위 현재 재고
+/// onHand  : 실제 보유 수량
+/// reserved: 픽으로 예약된 수량
 model Stock {
   id        String  @id @default(uuid())
   companyId String
@@ -183,11 +231,12 @@ model Stock {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// 회사 + 창고 + Lot는 유일
   @@unique([companyId, warehouseId, lotId])
-  @@index([companyId, warehouseId])
-  @@index([companyId, lotId])
 }
 
+/// 모든 재고 변동은 여기 기록됨
+/// 절대 수정하지 않는 Audit Log
 model InventoryTx {
   id        String  @id @default(uuid())
   companyId String
@@ -195,21 +244,23 @@ model InventoryTx {
 
   type InventoryTxType
 
+  /// 작업자
   actorUserId String?
   actorUser   User?   @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
+  /// 어떤 기능에서 발생했는지 추적용
   refType String?
   refId   String?
-  memo    String?
 
-  createdAt DateTime @default(now())
+  memo String?
 
   lines InventoryTxLine[]
 
-  @@index([companyId, type])
-  @@index([companyId, createdAt])
+  createdAt DateTime @default(now())
 }
 
+/// 재고 변동 상세 라인
+/// qtyDelta: +면 증가, -면 감소
 model InventoryTxLine {
   id   String      @id @default(uuid())
   txId String
@@ -224,9 +275,6 @@ model InventoryTxLine {
   qtyDelta Int
 
   createdAt DateTime @default(now())
-
-  @@index([warehouseId])
-  @@index([lotId])
 }
 
 model InboundUpload {
@@ -266,4 +314,87 @@ model InboundUploadRow {
 
   @@index([uploadId])
   @@index([itemCode])
+}
+
+/// 출고 주문 헤더
+/// plannedDate 기준으로 오늘~미래 출고 관리
+model OutboundOrder {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  plannedDate DateTime
+
+  title  String?
+  status OutboundStatus @default(DRAFT)
+
+  createdByUserId String?
+  createdByUser   User?   @relation("OutboundCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  confirmedByUserId String?
+  confirmedByUser   User?   @relation("OutboundConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+
+  confirmedAt DateTime?
+  memo        String?
+
+  lines OutboundLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+}
+
+/// 출고 품목 라인
+/// requestedQty : 요청 수량
+/// pickedQty    : 예약 수량 합계
+/// shippedQty   : 실제 출고 수량
+model OutboundLine {
+  id      String        @id @default(uuid())
+  orderId String
+  order   OutboundOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  requestedQty Int
+  pickedQty    Int @default(0)
+  shippedQty   Int @default(0)
+
+  status OutboundLineStatus @default(ACTIVE)
+
+  createdAt       DateTime         @default(now())
+  pickAllocations PickAllocation[]
+}
+
+/// 픽 예약 기록
+/// Lot 단위로 예약해야 FEFO 가능
+model PickAllocation {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  outboundLineId String
+  outboundLine   OutboundLine @relation(fields: [outboundLineId], references: [id], onDelete: Cascade)
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  lotId String
+  lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  qty Int
+
+  /// 예약 해제 여부
+  isReleased Boolean   @default(false)
+  releasedAt DateTime?
+
+  /// 출고 확정 반영 여부
+  isCommitted Boolean   @default(false)
+  committedAt DateTime?
+
+  createdAt DateTime @default(now())
 }
