@@ -1,23 +1,34 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Role } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findActiveUserByEmail(companyId: string, email: string) {
-    return this.prisma.user.findFirst({
+  async findActiveUserByEmail(companyId: string, email: string) {
+    const user = await this.prisma.user.findFirst({
       where: { companyId, email, isActive: true },
     });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
   }
 
-  findUserById(userId: string) {
-    return this.prisma.user.findUnique({ where: { id: userId } });
+  async findUserById(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
   }
 
-  findCompanyByName(name: string) {
-    return this.prisma.company.findUnique({ where: { name } });
+  async findCompanyByName(name: string) {
+    const company = await this.prisma.company.findUnique({ where: { name } });
+    if (!company) throw new NotFoundException('Company not found');
+    return company;
   }
 
   async createCompanyWithAdmin(params: {
@@ -26,6 +37,11 @@ export class UsersService {
     adminName: string;
     passwordHash: string;
   }) {
+    const existingCompany = await this.prisma.company.findUnique({
+      where: { name: params.companyName },
+    });
+    if (existingCompany) throw new ConflictException('Company already exists');
+
     const company = await this.prisma.company.create({
       data: { name: params.companyName },
     });
@@ -67,31 +83,45 @@ export class UsersService {
     passwordHash: string;
     role: Role;
   }) {
-    return this.prisma.user.create({
-      data: {
-        companyId: params.companyId,
-        email: params.email,
-        name: params.name,
-        passwordHash: params.passwordHash,
-        role: params.role,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    try {
+      return this.prisma.user.create({
+        data: {
+          companyId: params.companyId,
+          email: params.email,
+          name: params.name,
+          passwordHash: params.passwordHash,
+          role: params.role,
+          isActive: true,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          throw new ConflictException('Email already in use');
+        }
+      }
+      throw error;
+    }
   }
 
-  updateRole(companyId: string, userId: string, role: Role) {
-    return this.prisma.user.update({
-      where: { id: userId },
+  async updateRole(companyId: string, userId: string, role: Role) {
+    const user = await this.prisma.user.updateMany({
+      where: { id: userId, companyId },
       data: { role },
+    });
+
+    if (user.count === 0) throw new NotFoundException('User not found');
+    return this.prisma.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
         email: true,
@@ -104,10 +134,16 @@ export class UsersService {
     });
   }
 
-  deactivate(companyId: string, userId: string) {
-    return this.prisma.user.update({
-      where: { id: userId },
+  async deactivate(companyId: string, userId: string) {
+    const user = await this.prisma.user.updateMany({
+      where: { id: userId, companyId },
       data: { isActive: false },
+    });
+
+    if (user.count === 0) throw new NotFoundException('User not found');
+
+    return this.prisma.user.findUnique({
+      where: { id: userId },
       select: {
         id: true,
         email: true,
