@@ -23,7 +23,7 @@ import type { Request } from 'express';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { InboundService } from './inbound.service';
-import { InboundUploadResponse } from './dto/inbound-upload.response';
+import { InboundUploadResponse } from './dto/inbound-upload.response.dto';
 
 @ApiTags('Inbound')
 @ApiBearerAuth('access-token')

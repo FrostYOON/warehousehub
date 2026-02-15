@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { InboundModule } from './modules/inbound/inbound.module';
+import { StocksModule } from './modules/stocks/stocks.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { InboundModule } from './modules/inbound/inbound.module';
     UsersModule,
     WarehousesModule,
     InboundModule,
+    StocksModule,
   ],
   controllers: [AppController],
   providers: [AppService],
