@@ -9,6 +9,7 @@ import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { InboundModule } from './modules/inbound/inbound.module';
 import { StocksModule } from './modules/stocks/stocks.module';
 import { OutboundModule } from './modules/outbound/outbound.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { OutboundModule } from './modules/outbound/outbound.module';
     InboundModule,
     StocksModule,
     OutboundModule,
+    CustomersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
