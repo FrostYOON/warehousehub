@@ -6,7 +6,10 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
-import { hashPassword, comparePassword } from '../../common/utils/password.util';
+import {
+  hashPassword,
+  comparePassword,
+} from '../../common/utils/password.util';
 import {
   addDays,
   generateRefreshToken,
@@ -56,10 +59,6 @@ export class AuthService {
     name: string;
     password: string;
   }) {
-    const existingCompany = await this.users.findCompanyByName(dto.companyName);
-    if (existingCompany)
-      throw new BadRequestException('Company name already exists');
-
     const passwordHash = await hashPassword(dto.password);
 
     const { company, user } = await this.users.createCompanyWithAdmin({

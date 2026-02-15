@@ -4,7 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Role } from '@prisma/client';
+import { Role, StorageType } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 
 @Injectable()
@@ -44,6 +44,21 @@ export class UsersService {
 
     const company = await this.prisma.company.create({
       data: { name: params.companyName },
+    });
+    await this.prisma.warehouse.createMany({
+      data: [
+        { companyId: company.id, type: StorageType.DRY, name: 'DRY' },
+        {
+          companyId: company.id,
+          type: StorageType.COOL,
+          name: 'COOL',
+        },
+        {
+          companyId: company.id,
+          type: StorageType.FRZ,
+          name: 'FRZ',
+        },
+      ],
     });
 
     const user = await this.prisma.user.create({
