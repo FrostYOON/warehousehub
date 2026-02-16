@@ -18,6 +18,8 @@ import type { Request } from 'express';
 import { OutboundService } from './outbound.service';
 import { CreateOutboundOrderDto } from './dto/create-outbound-order.dto';
 import { PickReserveDto } from './dto/pick-reserve.dto';
+import { AddOutboundLineDto } from './dto/add-outbound-line.dto';
+import { UpdateOutboundLineDto } from './dto/update-outbound-line.dto';
 
 @ApiTags('Outbound')
 @ApiBearerAuth('access-token')
@@ -90,5 +92,37 @@ export class OutboundController {
   @Roles(Role.ADMIN, Role.WH_MANAGER)
   confirm(@Req() req: Request, @Param('id') id: string) {
     return this.outbound.confirm(req.user!.companyId, req.user!.userId, id);
+  }
+
+  @Post(':orderId/lines')
+  @Roles(Role.ADMIN, Role.WH_MANAGER, Role.SALES)
+  addLine(
+    @Req() req: Request,
+    @Param('orderId') orderId: string,
+    @Body() dto: AddOutboundLineDto,
+  ) {
+    return this.outbound.addLine(
+      req.user!.companyId,
+      req.user!.userId,
+      orderId,
+      dto,
+    );
+  }
+
+  @Patch(':orderId/lines/:lineId')
+  @Roles(Role.ADMIN, Role.WH_MANAGER, Role.SALES)
+  updateLine(
+    @Req() req: Request,
+    @Param('orderId') orderId: string,
+    @Param('lineId') lineId: string,
+    @Body() dto: UpdateOutboundLineDto,
+  ) {
+    return this.outbound.updateLineRequestedQty(
+      req.user!.companyId,
+      req.user!.userId,
+      orderId,
+      lineId,
+      dto,
+    );
   }
 }

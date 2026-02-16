@@ -13,6 +13,8 @@ import {
 } from '@prisma/client';
 import { CreateOutboundOrderDto } from './dto/create-outbound-order.dto';
 import { PickReserveDto, PickReserveMode } from './dto/pick-reserve.dto';
+import { AddOutboundLineDto } from './dto/add-outbound-line.dto';
+import { UpdateOutboundLineDto } from './dto/update-outbound-line.dto';
 
 @Injectable()
 export class OutboundService {
@@ -458,6 +460,262 @@ export class OutboundService {
       });
 
       return { message: 'Outbound confirmed' };
+    });
+  }
+
+  async addLine(
+    companyId: string,
+    userId: string,
+    orderId: string,
+    dto: AddOutboundLineDto,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.outboundOrder.findFirst({
+        where: { id: orderId, companyId },
+        select: { id: true, status: true },
+      });
+      if (!order) throw new NotFoundException('Order not found');
+
+      if (order.status === OutboundStatus.CONFIRMED) {
+        throw new BadRequestException('Cannot edit confirmed order');
+      }
+
+      // item이 내 회사 item인지 검증
+      const item = await tx.item.findFirst({
+        where: { id: dto.itemId, companyId, isActive: true },
+        select: { id: true },
+      });
+      if (!item) throw new BadRequestException('Invalid itemId');
+
+      return tx.outboundLine.create({
+        data: {
+          orderId,
+          itemId: dto.itemId,
+          requestedQty: dto.requestedQty,
+          status: OutboundLineStatus.ACTIVE,
+        },
+      });
+    });
+  }
+
+  async updateLineRequestedQty(
+    companyId: string,
+    userId: string,
+    orderId: string,
+    lineId: string,
+    dto: UpdateOutboundLineDto,
+  ) {
+    if (dto.requestedQty === undefined) {
+      throw new BadRequestException('requestedQty is required');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.outboundOrder.findFirst({
+        where: { id: orderId, companyId },
+        select: { id: true, status: true },
+      });
+      if (!order) throw new NotFoundException('Order not found');
+
+      if (order.status === OutboundStatus.CONFIRMED) {
+        throw new BadRequestException('Cannot edit confirmed order');
+      }
+
+      const line = await tx.outboundLine.findFirst({
+        where: { id: lineId, orderId },
+        select: {
+          id: true,
+          status: true,
+          itemId: true,
+          requestedQty: true,
+          pickedQty: true,
+          shippedQty: true,
+        },
+      });
+      if (!line) throw new NotFoundException('Line not found');
+      if (line.status === OutboundLineStatus.CANCELLED) {
+        throw new BadRequestException('Line already cancelled');
+      }
+      if (line.shippedQty > 0) {
+        throw new BadRequestException('Cannot edit shipped line');
+      }
+
+      const newRequested = dto.requestedQty;
+
+      // requested=0이면: 자동으로 전체 release + CANCELLED
+      if (newRequested === 0) {
+        // 기존 cancelLine 로직을 그대로 재사용하는게 가장 안전
+        // (cancelLine이 tx를 또 열면 안 되므로 tx 버전이 없으면 아래 방식으로 직접 처리해야 함)
+        // 여기서는 "직접 처리"로 간단히 구현합니다.
+
+        // 미확정 allocation 모두 조회
+        const allocations = await tx.pickAllocation.findMany({
+          where: {
+            companyId,
+            outboundLineId: lineId,
+            isReleased: false,
+            isCommitted: false,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        // release 전부
+        if (allocations.length > 0) {
+          const inv = await tx.inventoryTx.create({
+            data: {
+              companyId,
+              type: InventoryTxType.PICK_RELEASE,
+              actorUserId: userId,
+              refType: 'OUTBOUND_LINE',
+              refId: lineId,
+            },
+          });
+
+          for (const alloc of allocations) {
+            await tx.stock.update({
+              where: {
+                companyId_warehouseId_lotId: {
+                  companyId,
+                  warehouseId: alloc.warehouseId,
+                  lotId: alloc.lotId,
+                },
+              },
+              data: { reserved: { decrement: alloc.qty } },
+            });
+
+            await tx.pickAllocation.update({
+              where: { id: alloc.id },
+              data: { isReleased: true, releasedAt: new Date() },
+            });
+
+            await tx.inventoryTxLine.create({
+              data: {
+                txId: inv.id,
+                warehouseId: alloc.warehouseId,
+                lotId: alloc.lotId,
+                qtyDelta: -alloc.qty,
+              },
+            });
+          }
+        }
+
+        await tx.outboundLine.update({
+          where: { id: lineId },
+          data: {
+            requestedQty: 0,
+            pickedQty: 0,
+            status: OutboundLineStatus.CANCELLED,
+          },
+        });
+
+        return { message: 'Line cancelled (auto released)' };
+      }
+
+      // requestedQty 업데이트
+      await tx.outboundLine.update({
+        where: { id: lineId },
+        data: { requestedQty: newRequested },
+      });
+
+      // 초과 픽이면 자동 release
+      const overPicked = line.pickedQty - (newRequested ?? 0);
+      if (overPicked <= 0) {
+        return { message: 'Line updated' };
+      }
+
+      // 초과 픽(overPicked)만큼, 최신 allocation부터 해제(LIFO)
+      let remainToRelease = overPicked;
+
+      const inv = await tx.inventoryTx.create({
+        data: {
+          companyId,
+          type: InventoryTxType.PICK_RELEASE,
+          actorUserId: userId,
+          refType: 'OUTBOUND_LINE',
+          refId: lineId,
+          memo: 'Auto release due to requestedQty decrease',
+        },
+      });
+
+      const allocations = await tx.pickAllocation.findMany({
+        where: {
+          companyId,
+          outboundLineId: lineId,
+          isReleased: false,
+          isCommitted: false,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      for (const alloc of allocations) {
+        if (remainToRelease <= 0) break;
+
+        const releaseQty = Math.min(alloc.qty, remainToRelease);
+
+        // reserved 감소
+        await tx.stock.update({
+          where: {
+            companyId_warehouseId_lotId: {
+              companyId,
+              warehouseId: alloc.warehouseId,
+              lotId: alloc.lotId,
+            },
+          },
+          data: { reserved: { decrement: releaseQty } },
+        });
+
+        // allocation 부분 해제 처리
+        if (releaseQty === alloc.qty) {
+          await tx.pickAllocation.update({
+            where: { id: alloc.id },
+            data: { isReleased: true, releasedAt: new Date() },
+          });
+        } else {
+          // 일부만 해제: alloc.qty 줄이고, 해제된 qty는 released allocation으로 기록(추적 목적)
+          await tx.pickAllocation.update({
+            where: { id: alloc.id },
+            data: { qty: { decrement: releaseQty } },
+          });
+
+          await tx.pickAllocation.create({
+            data: {
+              companyId,
+              outboundLineId: lineId,
+              warehouseId: alloc.warehouseId,
+              lotId: alloc.lotId,
+              qty: releaseQty,
+              isReleased: true,
+              releasedAt: new Date(),
+            },
+          });
+        }
+
+        // 감사로그
+        await tx.inventoryTxLine.create({
+          data: {
+            txId: inv.id,
+            warehouseId: alloc.warehouseId,
+            lotId: alloc.lotId,
+            qtyDelta: -releaseQty,
+          },
+        });
+
+        remainToRelease -= releaseQty;
+      }
+
+      if (remainToRelease > 0) {
+        // 이론상 발생하면 데이터 꼬인 것
+        throw new BadRequestException(
+          'Auto release failed: not enough allocations',
+        );
+      }
+
+      // pickedQty도 초과분만큼 감소
+      await tx.outboundLine.update({
+        where: { id: lineId },
+        data: { pickedQty: { decrement: overPicked } },
+      });
+
+      return { message: 'Line updated (auto released)' };
     });
   }
 }
