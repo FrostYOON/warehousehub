@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
   IsString,
@@ -29,7 +29,7 @@ export class CreateOutboundOrderDto {
   @IsDateString()
   plannedDate!: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
   @IsString()
   memo?: string;
 
