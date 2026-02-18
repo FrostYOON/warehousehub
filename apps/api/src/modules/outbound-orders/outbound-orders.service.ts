@@ -16,7 +16,11 @@ const FINAL_STATUSES: OutboundStatus[] = [
   OutboundStatus.CANCELLED,
 ];
 
-// READY_TO_SHIP까지는 “편집 가능”이지만, PICKED/READY_TO_SHIP에서 편집하면 서버가 PICKING으로 롤백
+// READY_TO_SHIP까지는 “편집 가능”
+// 단, PICKED/READY_TO_SHIP 상태에서 편집이 발생하면:
+// - 상태를 PICKING으로 롤백
+// - 검수/배송 메타데이터 초기화
+// - pickedQty는 submit에서 재계산되므로 0으로 리셋
 const EDITABLE_UNTIL_READY: OutboundStatus[] = [
   OutboundStatus.DRAFT,
   OutboundStatus.PICKING,
@@ -109,7 +113,7 @@ export class OutboundOrdersService {
     return this.prisma.$transaction(async (tx) => {
       const order = await tx.outboundOrder.findFirst({
         where: { id: orderId, companyId },
-        select: { id: true, status: true, confirmedAt: true },
+        select: { id: true, status: true },
       });
       if (!order) throw new NotFoundException('Order not found');
 
@@ -136,7 +140,7 @@ export class OutboundOrdersService {
       // 편집 발생 → PICKING 유지
       await tx.outboundOrder.update({
         where: { id: orderId },
-        data: { status: OutboundStatus.PICKING },
+        data: { status: OutboundStatus.PICKING, version: { increment: 1 } },
       });
 
       return { message: 'Line added', lineId: line.id };
@@ -197,7 +201,7 @@ export class OutboundOrdersService {
 
       await tx.outboundLine.update({
         where: { id: lineId },
-        data: { requestedQty: newQty },
+        data: { requestedQty: newQty, version: { increment: 1 } },
       });
 
       // 편집 발생 → PICKING 유지 + pickedQty는 submit에서 동기화하되,
@@ -206,7 +210,7 @@ export class OutboundOrdersService {
 
       await tx.outboundOrder.update({
         where: { id: orderId },
-        data: { status: OutboundStatus.PICKING },
+        data: { status: OutboundStatus.PICKING, version: { increment: 1 } },
       });
 
       return { message: 'Line updated' };
@@ -263,15 +267,92 @@ export class OutboundOrdersService {
         data: {
           status: 'CANCELLED',
           pickedQty: 0,
+          version: { increment: 1 },
         },
       });
 
       await tx.outboundOrder.update({
         where: { id: orderId },
-        data: { status: OutboundStatus.PICKING },
+        data: { status: OutboundStatus.PICKING, version: { increment: 1 } },
       });
 
       return { message: 'Line cancelled & released' };
+    });
+  }
+
+  // -----------------------------
+  // Mutations (Order cancel)
+  // -----------------------------
+
+  /**
+   * 주문 전체 취소
+   * - DELIVERED/CANCELLED 는 취소 불가
+   * - 그 외 상태에서는: 미커밋 allocation 전부 release + 라인 전부 CANCELLED + 오더 CANCELLED
+   *
+   * NOTE: 권한(Role) 정책은 Controller/Guard에서 제어.
+   */
+  async cancelOrder(
+    companyId: string,
+    userId: string,
+    orderId: string,
+    reason?: string,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.outboundOrder.findFirst({
+        where: { id: orderId, companyId },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!order) throw new NotFoundException('Order not found');
+
+      // 배송 완료/이미 취소는 불가
+      if (
+        order.status === OutboundStatus.DELIVERED ||
+        order.status === OutboundStatus.CANCELLED
+      ) {
+        throw new BadRequestException('Order cannot be cancelled');
+      }
+
+      // 출고(배송) 완료 전이면 언제든 라인/오더 취소 가능 정책
+      // 1) 미커밋 allocation 전부 release
+      await this.picking.releaseAllForOrderTx(tx, companyId, orderId);
+
+      // 2) 라인 전부 CANCELLED 처리
+      await tx.outboundLine.updateMany({
+        where: { orderId, status: { not: 'CANCELLED' } },
+        data: {
+          status: 'CANCELLED',
+          pickedQty: 0,
+          shippedQty: 0,
+          version: { increment: 1 },
+        },
+      });
+
+      // 3) 오더 CANCELLED + 검수/배송 메타데이터 초기화
+      await tx.outboundOrder.update({
+        where: { id: orderId },
+        data: {
+          status: OutboundStatus.CANCELLED,
+          version: { increment: 1 },
+
+          // 검수/배송 관련 메타데이터 초기화
+          pickedSubmittedByUserId: null,
+          pickedSubmittedAt: null,
+          verifiedByUserId: null,
+          verifiedAt: null,
+          shippingStartedByUserId: null,
+          shippingStartedAt: null,
+          deliveredByUserId: null,
+          deliveredAt: null,
+
+          memo: reason ? `[CANCELLED] ${reason}` : '[CANCELLED]',
+        },
+      });
+
+      return { message: 'Order cancelled', orderId };
     });
   }
 
@@ -284,29 +365,54 @@ export class OutboundOrdersService {
     orderId: string,
     currentStatus: OutboundStatus,
   ) {
-    if (!EDITABLE_UNTIL_READY.includes(currentStatus)) {
-      throw new BadRequestException('Order is not editable');
-    }
-
     if (FINAL_STATUSES.includes(currentStatus)) {
       throw new BadRequestException('Order is final');
     }
 
-    // ✅ 핵심: PICKED/READY_TO_SHIP에서 편집하면 무조건 PICKING으로 롤백 + confirmed 초기화
+    if (!EDITABLE_UNTIL_READY.includes(currentStatus)) {
+      throw new BadRequestException('Order is not editable');
+    }
+
+    // ✅ 핵심: PICKED/READY_TO_SHIP에서 편집하면 무조건 PICKING으로 롤백
+    // - 검수/배송 단계 메타데이터를 초기화(스키마 기준)
+    // - 라인 pickedQty는 submit에서 재계산되므로, 편집 시점에는 0으로 리셋해 “오래된 값”을 방지
     if (
       currentStatus === OutboundStatus.PICKED ||
       currentStatus === OutboundStatus.READY_TO_SHIP
     ) {
+      await tx.outboundLine.updateMany({
+        where: {
+          orderId,
+          status: { not: 'CANCELLED' },
+        },
+        data: {
+          pickedQty: 0,
+          version: { increment: 1 },
+        },
+      });
+
       await tx.outboundOrder.update({
         where: { id: orderId },
         data: {
           status: OutboundStatus.PICKING,
-          confirmedByUserId: null,
-          confirmedAt: null,
+          version: { increment: 1 },
+
+          pickedSubmittedByUserId: null,
+          pickedSubmittedAt: null,
+
+          // 검수 완료 정보 초기화
+          verifiedByUserId: null,
+          verifiedAt: null,
+
+          // 배송 시작 정보 초기화
+          shippingStartedByUserId: null,
+          shippingStartedAt: null,
+
+          // 배송 완료 정보 초기화
+          deliveredByUserId: null,
+          deliveredAt: null,
         },
       });
     }
-
-    // DRAFT/PICKING이면 그대로 진행
   }
 }

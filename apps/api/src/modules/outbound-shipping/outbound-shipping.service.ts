@@ -119,8 +119,8 @@ export class OutboundShippingService {
         data: {
           status: OutboundStatus.DELIVERED,
           // 지금은 기존 필드를 재사용. 나중에 deliveredBy/deliveredAt로 분리 추천
-          confirmedByUserId: userId,
-          confirmedAt: new Date(),
+          deliveredByUserId: userId,
+          deliveredAt: new Date(),
         },
       });
 

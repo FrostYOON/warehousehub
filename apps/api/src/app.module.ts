@@ -8,7 +8,6 @@ import { UsersModule } from './modules/users/users.module';
 import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { InboundModule } from './modules/inbound/inbound.module';
 import { StocksModule } from './modules/stocks/stocks.module';
-import { OutboundModule } from './modules/outbound/outbound.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { OutboundOrdersModule } from './modules/outbound-orders/outbound-orders.module';
 import { OutboundShippingModule } from './modules/outbound-shipping/outbound-shipping.module';
@@ -26,7 +25,6 @@ import { OutboundPickingModule } from './modules/outbound-picking/outbound-picki
     WarehousesModule,
     InboundModule,
     StocksModule,
-    OutboundModule,
     CustomersModule,
     OutboundOrdersModule,
     OutboundShippingModule,

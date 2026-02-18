@@ -61,6 +61,8 @@ enum OutboundStatus {
 enum OutboundLineStatus {
   ACTIVE
   CANCELLED
+  SHORT_SHIPPED // 일부만 배송됨(파손/품절 등)
+  DELIVERED // 라인 단위 완료
 }
 
 /// 픽 방식
@@ -116,15 +118,18 @@ model User {
   inboundUploads InboundUpload[]
 
   createdOutboundOrders         OutboundOrder[] @relation("OutboundCreatedBy")
-  confirmedOutboundOrders       OutboundOrder[] @relation("OutboundConfirmedBy")
+  pickedSubmittedOutboundOrders OutboundOrder[] @relation("OutboundPickedSubmittedBy")
   verifiedOutboundOrders        OutboundOrder[] @relation("OutboundVerifiedBy")
   shippingStartedOutboundOrders OutboundOrder[] @relation("OutboundShippingStartedBy")
   deliveredOutboundOrders       OutboundOrder[] @relation("OutboundDeliveredBy")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  pickAllocations PickAllocation[] @relation("PickPickedBy")
 
   @@unique([companyId, email])
+  @@index([companyId])
+  @@index([role])
 }
 
 /// 회사 내 창고
@@ -145,6 +150,7 @@ model Warehouse {
   pickAllocations PickAllocation[]
 
   @@unique([companyId, type])
+  @@index([companyId])
 }
 
 /// 상품 마스터
@@ -165,6 +171,8 @@ model Item {
   outboundLines OutboundLine[]
 
   @@unique([companyId, itemCode])
+  @@index([companyId])
+  @@index([itemCode])
 }
 
 model Customer {
@@ -228,6 +236,8 @@ model Lot {
   pickAllocations PickAllocation[]
 
   @@unique([companyId, itemId, expiryDate])
+  @@index([companyId, itemId])
+  @@index([companyId, expiryDate])
 }
 
 /// 창고 + Lot 단위 현재 재고
@@ -252,6 +262,8 @@ model Stock {
 
   /// 회사 + 창고 + Lot는 유일
   @@unique([companyId, warehouseId, lotId])
+  @@index([companyId, warehouseId])
+  @@index([companyId, lotId])
 }
 
 /// 모든 재고 변동은 여기 기록됨
@@ -276,6 +288,9 @@ model InventoryTx {
   lines InventoryTxLine[]
 
   createdAt DateTime @default(now())
+
+  @@index([companyId, type])
+  @@index([companyId, createdAt])
 }
 
 /// 재고 변동 상세 라인
@@ -294,6 +309,10 @@ model InventoryTxLine {
   qtyDelta Int
 
   createdAt DateTime @default(now())
+
+  @@index([txId])
+  @@index([warehouseId])
+  @@index([lotId])
 }
 
 model InboundUpload {
@@ -353,26 +372,31 @@ model OutboundOrder {
   createdByUserId String?
   createdByUser   User?   @relation("OutboundCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
-  confirmedByUserId String?
-  confirmedByUser   User?   @relation("OutboundConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+  /// PICKED(픽 완료 제출) 기록
+  pickedSubmittedByUserId String?
+  pickedSubmittedByUser   User?     @relation("OutboundPickedSubmittedBy", fields: [pickedSubmittedByUserId], references: [id], onDelete: SetNull)
+  pickedSubmittedAt       DateTime?
 
+  /// READY_TO_SHIP(검수 완료) 기록
   verifiedByUserId String?
   verifiedByUser   User?     @relation("OutboundVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
   verifiedAt       DateTime?
 
+  /// SHIPPING(배송 시작) 기록
   shippingStartedByUserId String?
   shippingStartedByUser   User?     @relation("OutboundShippingStartedBy", fields: [shippingStartedByUserId], references: [id], onDelete: SetNull)
   shippingStartedAt       DateTime?
 
+  /// DELIVERED(배송 완료) 기록
   deliveredByUserId String?
   deliveredByUser   User?     @relation("OutboundDeliveredBy", fields: [deliveredByUserId], references: [id], onDelete: SetNull)
   deliveredAt       DateTime?
 
-  confirmedAt DateTime?
-  memo        String?
+  memo String?
 
   lines OutboundLine[]
 
+  version   Int      @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -382,9 +406,10 @@ model OutboundOrder {
 }
 
 /// 출고 품목 라인
-/// requestedQty : 요청 수량
-/// pickedQty    : 예약 수량 합계
-/// shippedQty   : 실제 출고 수량
+/// requestedQty : 요청 수량(오더 수량)
+/// pickedQty    : 실제 픽 체크 합계(부분 픽 허용)
+/// shippedQty   : 출고 처리 수량(배송/출고 완료 시점에 반영)
+/// deliveredQty : 실제 배송 완료 수량(부분 배송/파손/품절 반영)
 model OutboundLine {
   id      String        @id @default(uuid())
   orderId String
@@ -396,10 +421,14 @@ model OutboundLine {
   requestedQty Int
   pickedQty    Int @default(0)
   shippedQty   Int @default(0)
+  deliveredQty Int @default(0)
 
   status OutboundLineStatus @default(ACTIVE)
 
-  createdAt       DateTime         @default(now())
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   pickAllocations PickAllocation[]
 
   @@index([orderId])
@@ -422,10 +451,18 @@ model PickAllocation {
   lotId String
   lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
-  qty Int
+  /// 예약된 수량(시스템이 FEFO로 잡아둔 수량 또는 수동 지정 수량)
+  qty       Int
+  /// 실제 픽 체크 수량(부분 픽 허용: 0~qty)
+  pickedQty Int @default(0)
 
   /// 🔹 픽 방식 (자동 / 수동)
-  source PickSource @default(AUTO_FEFO)
+  source       PickSource @default(AUTO_FEFO)
+  manualReason String?
+
+  pickedByUserId String?
+  pickedByUser   User?     @relation("PickPickedBy", fields: [pickedByUserId], references: [id], onDelete: SetNull)
+  pickedAt       DateTime?
 
   /// 예약 해제 여부
   isReleased Boolean   @default(false)
@@ -437,6 +474,8 @@ model PickAllocation {
 
   createdAt DateTime @default(now())
 
-  @@index([companyId, outboundLineId])
+  @@index([companyId, outboundLineId, isReleased, isCommitted])
   @@index([companyId, warehouseId, lotId])
+  @@index([companyId, pickedByUserId])
+  @@index([companyId, outboundLineId])
 }

@@ -69,21 +69,35 @@ export class OutboundPickingService {
 
         const picked = sumByLine.get(line.id) ?? 0;
 
+        // ✅ 정책: 부분 픽은 허용(입고 후 추가 픽 가능)
+        // ❌ 초과 픽은 금지: 더 필요하면 오더 requestedQty를 먼저 늘리고 reserve/pick 진행
         if (picked > line.requestedQty) {
           throw new BadRequestException(
-            'Picked quantity exceeds requested quantity',
+            `Picked quantity exceeds requested quantity (lineId=${line.id})`,
           );
         }
 
         await tx.outboundLine.update({
           where: { id: line.id },
-          data: { pickedQty: picked },
+          data: {
+            pickedQty: picked,
+            version: { increment: 1 },
+          },
         });
       }
 
       await tx.outboundOrder.update({
         where: { id: orderId },
-        data: { status: OutboundStatus.PICKED },
+        data: {
+          status: OutboundStatus.PICKED,
+          version: { increment: 1 },
+          verifiedAt: null,
+          verifiedByUserId: null,
+          shippingStartedAt: null,
+          shippingStartedByUserId: null,
+          deliveredAt: null,
+          deliveredByUserId: null,
+        },
       });
 
       return { message: 'Picked submitted' };
@@ -156,17 +170,35 @@ export class OutboundPickingService {
         },
       });
 
-      // 수동 픽이 들어오면 PICKING으로 유지(READY_TO_SHIP/PICKED면 재검수 필요)
+      // 수동 픽이 들어오면 PICKING으로 롤백(READY_TO_SHIP/PICKED면 재검수/재출발 준비 필요)
+      // ✅ 정책: pickedQty는 submit 시점에 '현재 allocation 합계'로 동기화하므로 여기서는 0으로 초기화
       if (order.status !== OutboundStatus.PICKING) {
-        await tx.outboundOrder.update({
-          where: { id: orderId },
-          data: {
-            status: OutboundStatus.PICKING,
-            confirmedAt: null,
-            confirmedByUserId: null,
-          },
+        await tx.outboundLine.updateMany({
+          where: { orderId, status: 'ACTIVE' },
+          data: { pickedQty: 0, version: { increment: 1 } },
         });
       }
+
+      // ✅ 오더 메타데이터 초기화 + 버전 증가
+      await tx.outboundOrder.update({
+        where: { id: orderId },
+        data: {
+          status: OutboundStatus.PICKING,
+          version: { increment: 1 },
+          verifiedAt: null,
+          verifiedByUserId: null,
+          shippingStartedAt: null,
+          shippingStartedByUserId: null,
+          deliveredAt: null,
+          deliveredByUserId: null,
+        },
+      });
+
+      // ✅ 해당 라인도 변경 이력(버전) 반영
+      await tx.outboundLine.update({
+        where: { id: line.id },
+        data: { version: { increment: 1 } },
+      });
 
       return { message: 'Manual pick reserved' };
     });
@@ -214,11 +246,17 @@ export class OutboundPickingService {
       await this.releaseAllForOrderTx(tx, companyId, orderId);
     }
 
+    const shortages: Array<{
+      outboundLineId: string;
+      itemId: string;
+      shortage: number;
+    }> = [];
+
     for (const line of order.lines) {
       if (line.status === 'CANCELLED') continue;
       if (line.requestedQty <= 0) continue;
 
-      await this.reserveAdditionalForLineTx(
+      const { shortage } = await this.reserveAdditionalForLineTx(
         tx,
         companyId,
         orderId,
@@ -226,14 +264,37 @@ export class OutboundPickingService {
         line.itemId,
         line.requestedQty,
       );
+
+      if (shortage > 0) {
+        shortages.push({
+          outboundLineId: line.id,
+          itemId: line.itemId,
+          shortage,
+        });
+      }
     }
 
     await tx.outboundOrder.update({
       where: { id: orderId },
-      data: { status: OutboundStatus.PICKING },
+      data: {
+        status: OutboundStatus.PICKING,
+        version: { increment: 1 },
+        verifiedAt: null,
+        verifiedByUserId: null,
+        shippingStartedAt: null,
+        shippingStartedByUserId: null,
+        deliveredAt: null,
+        deliveredByUserId: null,
+      },
     });
 
-    return { message: 'Reserved (FEFO)', orderId };
+    return {
+      message: shortages.length
+        ? 'Reserved (FEFO - partial)'
+        : 'Reserved (FEFO)',
+      orderId,
+      shortages,
+    };
   }
 
   // 라인 단위: 추가 reserve (FEFO)
@@ -244,8 +305,8 @@ export class OutboundPickingService {
     outboundLineId: string,
     itemId: string,
     addQty: number,
-  ) {
-    if (addQty <= 0) return;
+  ): Promise<{ reserved: number; shortage: number }> {
+    if (addQty <= 0) return { reserved: 0, shortage: 0 };
 
     // FEFO: expiryDate 있는 lot 먼저, 그 다음 expiry null
     const stocksWithExpiry = await tx.stock.findMany({
@@ -297,9 +358,10 @@ export class OutboundPickingService {
       remaining -= take;
     }
 
-    if (remaining > 0) {
-      throw new BadRequestException('Insufficient stock to reserve');
-    }
+    // ✅ 정책: 재고 부족이어도 '가능한 만큼'만 예약하고 부족분은 남긴다.
+    // (입고 이후 추가 픽/추가 예약 가능)
+    const reserved = addQty - remaining;
+    return { reserved, shortage: remaining };
   }
 
   // 라인 단위: qty만큼 release (LIFO)

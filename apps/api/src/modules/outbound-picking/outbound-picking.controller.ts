@@ -5,6 +5,14 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Role } from '@prisma/client';
 import type { Request } from 'express';
+
+type AuthedRequest = Request & {
+  user: {
+    userId: string;
+    companyId: string;
+    role: Role;
+  };
+};
 import { OutboundPickingService } from './outbound-picking.service';
 import { ManualPickDto } from './dto/manual-pick.dto';
 
@@ -17,20 +25,20 @@ export class OutboundPickingController {
 
   @Post(':id/pick/submit')
   @Roles(Role.ADMIN, Role.WH_MANAGER)
-  submit(@Req() req: Request, @Param('id') id: string) {
-    return this.picking.submit(req.user!.companyId, req.user!.userId, id);
+  submit(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.picking.submit(req.user.companyId, req.user.userId, id);
   }
 
   @Post(':id/pick/manual')
   @Roles(Role.ADMIN, Role.WH_MANAGER)
   manualPick(
-    @Req() req: Request,
+    @Req() req: AuthedRequest,
     @Param('id') id: string,
     @Body() dto: ManualPickDto,
   ) {
     return this.picking.manualPick(
-      req.user!.companyId,
-      req.user!.userId,
+      req.user.companyId,
+      req.user.userId,
       id,
       dto,
     );
