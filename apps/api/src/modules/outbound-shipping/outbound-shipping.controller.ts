@@ -14,7 +14,7 @@ import { OutboundShippingService } from './outbound-shipping.service';
 export class OutboundShippingController {
   constructor(private readonly shipping: OutboundShippingService) {}
 
-  @Post(':id/verify')
+  @Post(':id/ship/verify')
   @Roles(Role.ADMIN, Role.WH_MANAGER, Role.DELIVERY)
   verify(@Req() req: Request, @Param('id') id: string) {
     return this.shipping.verify(req.user!.companyId, req.user!.userId, id);
