@@ -21,7 +21,8 @@ export class OutboundShippingService {
       where: { id: orderId },
       data: {
         status: OutboundStatus.READY_TO_SHIP,
-        // 추후 verifiedBy/verifiedAt 컬럼 생기면 여기 추가
+        verifiedByUserId: userId,
+        verifiedAt: new Date(),
       },
     });
 
@@ -46,7 +47,8 @@ export class OutboundShippingService {
       where: { id: orderId },
       data: {
         status: OutboundStatus.SHIPPING,
-        // 추후 shippedBy/shippedAt 컬럼 생기면 여기 추가
+        shippingStartedByUserId: userId,
+        shippingStartedAt: new Date(),
       },
     });
 
@@ -70,7 +72,7 @@ export class OutboundShippingService {
       const allocations = await tx.pickAllocation.findMany({
         where: {
           companyId,
-          outboundLine: { orderId },
+          outboundLine: { orderId, status: 'ACTIVE' },
           isReleased: false,
           isCommitted: false,
         },
@@ -103,13 +105,23 @@ export class OutboundShippingService {
       }
 
       // 2) shippedQty 업데이트(완료 시점 기준)
+      // 커밋된 allocation 수량(=이번 complete에서 처리한 allocations)의 라인별 합계를 shippedQty로 기록
+      const shippedByLineId = new Map<string, number>();
+      for (const a of allocations) {
+        shippedByLineId.set(
+          a.outboundLineId,
+          (shippedByLineId.get(a.outboundLineId) ?? 0) + a.qty,
+        );
+      }
+
       for (const line of order.lines) {
         if (line.status === 'CANCELLED') continue;
 
-        // shippedQty는 "완료로 커밋된 수량" 의미로 운용
+        const shipped = shippedByLineId.get(line.id) ?? 0;
+        // shippedQty는 "출고 완료로 커밋된 수량" 의미로 운용
         await tx.outboundLine.update({
           where: { id: line.id },
-          data: { shippedQty: line.pickedQty },
+          data: { shippedQty: shipped },
         });
       }
 
@@ -118,7 +130,6 @@ export class OutboundShippingService {
         where: { id: orderId },
         data: {
           status: OutboundStatus.DELIVERED,
-          // 지금은 기존 필드를 재사용. 나중에 deliveredBy/deliveredAt로 분리 추천
           deliveredByUserId: userId,
           deliveredAt: new Date(),
         },
