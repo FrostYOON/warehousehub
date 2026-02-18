@@ -48,16 +48,27 @@ enum InboundUploadStatus {
 
 /// 출고 오더 상태
 enum OutboundStatus {
-  DRAFT // 생성만 된 상태
-  PICKING // 픽 진행 중 (예약 발생)
-  CONFIRMED // 출고 확정 (재고 차감)
-  CANCELLED // 전체 취소
+  DRAFT // 출고 요청
+  PICKING // 픽킹 중
+  PICKED // 픽 완료
+  READY_TO_SHIP // 검수 완료/출발 준비
+  SHIPPING // 배송중
+  DELIVERED // 배송(출고) 완료
+  CANCELLED // 취소
 }
 
 /// 출고 라인 상태
 enum OutboundLineStatus {
   ACTIVE
   CANCELLED
+}
+
+/// 픽 방식
+/// AUTO_FEFO : 시스템 자동 선입선출
+/// MANUAL    : 창고 담당자가 특정 Lot 선택
+enum PickSource {
+  AUTO_FEFO
+  MANUAL
 }
 
 /// 하나의 회사(테넌트)
@@ -104,10 +115,11 @@ model User {
   /// 이 사용자가 업로드한 입고 엑셀
   inboundUploads InboundUpload[]
 
-  outboundOrders OutboundOrder[]
-
-  createdOutboundOrders   OutboundOrder[] @relation("OutboundCreatedBy")
-  confirmedOutboundOrders OutboundOrder[] @relation("OutboundConfirmedBy")
+  createdOutboundOrders         OutboundOrder[] @relation("OutboundCreatedBy")
+  confirmedOutboundOrders       OutboundOrder[] @relation("OutboundConfirmedBy")
+  verifiedOutboundOrders        OutboundOrder[] @relation("OutboundVerifiedBy")
+  shippingStartedOutboundOrders OutboundOrder[] @relation("OutboundShippingStartedBy")
+  deliveredOutboundOrders       OutboundOrder[] @relation("OutboundDeliveredBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -344,6 +356,18 @@ model OutboundOrder {
   confirmedByUserId String?
   confirmedByUser   User?   @relation("OutboundConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
 
+  verifiedByUserId String?
+  verifiedByUser   User?     @relation("OutboundVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+  verifiedAt       DateTime?
+
+  shippingStartedByUserId String?
+  shippingStartedByUser   User?     @relation("OutboundShippingStartedBy", fields: [shippingStartedByUserId], references: [id], onDelete: SetNull)
+  shippingStartedAt       DateTime?
+
+  deliveredByUserId String?
+  deliveredByUser   User?     @relation("OutboundDeliveredBy", fields: [deliveredByUserId], references: [id], onDelete: SetNull)
+  deliveredAt       DateTime?
+
   confirmedAt DateTime?
   memo        String?
 
@@ -351,8 +375,10 @@ model OutboundOrder {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  user      User?    @relation(fields: [userId], references: [id])
-  userId    String?
+
+  @@index([companyId, status])
+  @@index([companyId, plannedDate])
+  @@index([companyId, customerId])
 }
 
 /// 출고 품목 라인
@@ -375,6 +401,9 @@ model OutboundLine {
 
   createdAt       DateTime         @default(now())
   pickAllocations PickAllocation[]
+
+  @@index([orderId])
+  @@index([itemId])
 }
 
 /// 픽 예약 기록
@@ -395,6 +424,9 @@ model PickAllocation {
 
   qty Int
 
+  /// 🔹 픽 방식 (자동 / 수동)
+  source PickSource @default(AUTO_FEFO)
+
   /// 예약 해제 여부
   isReleased Boolean   @default(false)
   releasedAt DateTime?
@@ -404,4 +436,7 @@ model PickAllocation {
   committedAt DateTime?
 
   createdAt DateTime @default(now())
+
+  @@index([companyId, outboundLineId])
+  @@index([companyId, warehouseId, lotId])
 }

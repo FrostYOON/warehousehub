@@ -10,6 +10,9 @@ import { InboundModule } from './modules/inbound/inbound.module';
 import { StocksModule } from './modules/stocks/stocks.module';
 import { OutboundModule } from './modules/outbound/outbound.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { OutboundOrdersModule } from './modules/outbound-orders/outbound-orders.module';
+import { OutboundShippingModule } from './modules/outbound-shipping/outbound-shipping.module';
+import { OutboundPickingModule } from './modules/outbound-picking/outbound-picking.module';
 
 @Module({
   imports: [
@@ -25,6 +28,9 @@ import { CustomersModule } from './modules/customers/customers.module';
     StocksModule,
     OutboundModule,
     CustomersModule,
+    OutboundOrdersModule,
+    OutboundShippingModule,
+    OutboundPickingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

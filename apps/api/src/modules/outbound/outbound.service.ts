@@ -11,10 +11,10 @@ import {
   OutboundLineStatus,
   StorageType,
 } from '@prisma/client';
-import { CreateOutboundOrderDto } from './dto/create-outbound-order.dto';
+import { CreateOutboundOrderDto } from '../outbound-orders/dto/create-outbound-order.dto';
 import { PickReserveDto, PickReserveMode } from './dto/pick-reserve.dto';
 import { AddOutboundLineDto } from './dto/add-outbound-line.dto';
-import { UpdateOutboundLineDto } from './dto/update-outbound-line.dto';
+import { UpdateOutboundLineDto } from '../outbound-orders/dto/update-outbound-line.dto';
 
 @Injectable()
 export class OutboundService {
@@ -443,7 +443,7 @@ export class OutboundService {
       await tx.outboundOrder.update({
         where: { id: orderId },
         data: {
-          status: 'CONFIRMED',
+          status: OutboundStatus.READY_TO_SHIP,
           confirmedByUserId: userId,
           confirmedAt: new Date(),
         },
@@ -476,7 +476,7 @@ export class OutboundService {
       });
       if (!order) throw new NotFoundException('Order not found');
 
-      if (order.status === OutboundStatus.CONFIRMED) {
+      if (order.status === OutboundStatus.READY_TO_SHIP) {
         throw new BadRequestException('Cannot edit confirmed order');
       }
 
@@ -516,7 +516,7 @@ export class OutboundService {
       });
       if (!order) throw new NotFoundException('Order not found');
 
-      if (order.status === OutboundStatus.CONFIRMED) {
+      if (order.status === OutboundStatus.READY_TO_SHIP) {
         throw new BadRequestException('Cannot edit confirmed order');
       }
 

@@ -16,15 +16,15 @@ import { Role } from '@prisma/client';
 import type { Request } from 'express';
 
 import { OutboundService } from './outbound.service';
-import { CreateOutboundOrderDto } from './dto/create-outbound-order.dto';
+import { CreateOutboundOrderDto } from '../outbound-orders/dto/create-outbound-order.dto';
 import { PickReserveDto } from './dto/pick-reserve.dto';
 import { AddOutboundLineDto } from './dto/add-outbound-line.dto';
-import { UpdateOutboundLineDto } from './dto/update-outbound-line.dto';
+import { UpdateOutboundLineDto } from '../outbound-orders/dto/update-outbound-line.dto';
 
 @ApiTags('Outbound')
 @ApiBearerAuth('access-token')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
-@Controller('outbound/orders')
+@Controller('outbound/order')
 export class OutboundController {
   constructor(private readonly outbound: OutboundService) {}
 
