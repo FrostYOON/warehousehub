@@ -12,6 +12,7 @@ import { CustomersModule } from './modules/customers/customers.module';
 import { OutboundOrdersModule } from './modules/outbound-orders/outbound-orders.module';
 import { OutboundShippingModule } from './modules/outbound-shipping/outbound-shipping.module';
 import { OutboundPickingModule } from './modules/outbound-picking/outbound-picking.module';
+import { ReturnsModule } from './modules/returns/returns.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { OutboundPickingModule } from './modules/outbound-picking/outbound-picki
     OutboundOrdersModule,
     OutboundShippingModule,
     OutboundPickingModule,
+    ReturnsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

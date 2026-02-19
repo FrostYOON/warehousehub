@@ -73,6 +73,18 @@ enum PickSource {
   MANUAL
 }
 
+enum ReturnStatus {
+  RECEIVED // 리턴 접수됨
+  DECIDED // 재입고/폐기 결정 완료
+  COMPLETED // 재고 반영까지 완료
+  CANCELLED
+}
+
+enum ReturnLineDecision {
+  RESTOCK // 재입고
+  DISCARD // 폐기
+}
+
 /// 하나의 회사(테넌트)
 /// 모든 데이터는 companyId 기준으로 격리됨
 model Company {
@@ -94,6 +106,7 @@ model Company {
   updatedAt       DateTime         @updatedAt
   outboundOrders  OutboundOrder[]
   pickAllocations PickAllocation[]
+  returnReceipts  ReturnReceipt[]
 }
 
 /// 회사 소속 사용자
@@ -122,11 +135,16 @@ model User {
   verifiedOutboundOrders        OutboundOrder[] @relation("OutboundVerifiedBy")
   shippingStartedOutboundOrders OutboundOrder[] @relation("OutboundShippingStartedBy")
   deliveredOutboundOrders       OutboundOrder[] @relation("OutboundDeliveredBy")
-
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  pickAllocations PickAllocation[] @relation("PickPickedBy")
-
+  pickAllocations        PickAllocation[] @relation("PickPickedBy")
+  returnReceivedReceipts ReturnReceipt[]  @relation("ReturnReceivedBy")
+  returnDecidedReceipts   ReturnReceipt[] @relation("ReturnDecidedBy")
+  returnCompletedReceipts ReturnReceipt[] @relation("ReturnCompletedBy")
+  returnLineDecisions  ReturnReceiptLine[] @relation("ReturnLineDecidedBy")
+  returnLineProcesses  ReturnReceiptLine[] @relation("ReturnLineProcessedBy")
+  
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  
   @@unique([companyId, email])
   @@index([companyId])
   @@index([role])
@@ -166,9 +184,10 @@ model Item {
 
   lots Lot[]
 
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  outboundLines OutboundLine[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  outboundLines      OutboundLine[]
+  returnReceiptLines ReturnReceiptLine[]
 
   @@unique([companyId, itemCode])
   @@index([companyId])
@@ -196,6 +215,7 @@ model Customer {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   outboundOrders OutboundOrder[]
+  returnReceipts ReturnReceipt[]
 
   @@index([companyId])
   @@index([customerName])
@@ -358,6 +378,7 @@ model InboundUploadRow {
 /// plannedDate 기준으로 오늘~미래 출고 관리
 model OutboundOrder {
   id        String  @id @default(uuid())
+  orderNo   Int     @unique
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -478,4 +499,71 @@ model PickAllocation {
   @@index([companyId, warehouseId, lotId])
   @@index([companyId, pickedByUserId])
   @@index([companyId, outboundLineId])
+}
+
+model ReturnReceipt {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  receivedAt DateTime     @default(now())
+  status     ReturnStatus @default(RECEIVED)
+  memo       String?
+
+  receivedByUserId String?
+  receivedByUser   User?   @relation("ReturnReceivedBy", fields: [receivedByUserId], references: [id], onDelete: SetNull)
+
+  decidedByUserId String?
+  decidedByUser   User? @relation("ReturnDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  decidedAt       DateTime?
+
+  completedByUserId String?
+  completedByUser   User? @relation("ReturnCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  completedAt       DateTime?
+
+  lines ReturnReceiptLine[]
+
+  version Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId, status])
+  @@index([companyId, receivedAt])
+  @@index([companyId, customerId])
+}
+
+model ReturnReceiptLine {
+  id        String        @id @default(uuid())
+  receiptId String
+  receipt   ReturnReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  storageType StorageType
+  expiryDate  DateTime?
+  qty         Int
+
+  // 결정(재입고/폐기)
+  decision        ReturnLineDecision?
+  decidedAt       DateTime?
+  decidedByUserId String?
+  decidedByUser   User? @relation("ReturnLineDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  // 재고 반영(완료)
+  processedAt       DateTime?
+  processedByUserId String?
+  processedByUser   User? @relation("ReturnLineProcessedBy", fields: [processedByUserId], references: [id], onDelete: SetNull)
+
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([receiptId])
+  @@index([itemId])
+  @@index([itemId, expiryDate])
 }
