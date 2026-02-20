@@ -130,21 +130,21 @@ model User {
   /// 이 사용자가 업로드한 입고 엑셀
   inboundUploads InboundUpload[]
 
-  createdOutboundOrders         OutboundOrder[] @relation("OutboundCreatedBy")
-  pickedSubmittedOutboundOrders OutboundOrder[] @relation("OutboundPickedSubmittedBy")
-  verifiedOutboundOrders        OutboundOrder[] @relation("OutboundVerifiedBy")
-  shippingStartedOutboundOrders OutboundOrder[] @relation("OutboundShippingStartedBy")
-  deliveredOutboundOrders       OutboundOrder[] @relation("OutboundDeliveredBy")
-  pickAllocations        PickAllocation[] @relation("PickPickedBy")
-  returnReceivedReceipts ReturnReceipt[]  @relation("ReturnReceivedBy")
-  returnDecidedReceipts   ReturnReceipt[] @relation("ReturnDecidedBy")
-  returnCompletedReceipts ReturnReceipt[] @relation("ReturnCompletedBy")
-  returnLineDecisions  ReturnReceiptLine[] @relation("ReturnLineDecidedBy")
-  returnLineProcesses  ReturnReceiptLine[] @relation("ReturnLineProcessedBy")
-  
-  createdAt              DateTime         @default(now())
-  updatedAt              DateTime         @updatedAt
-  
+  createdOutboundOrders         OutboundOrder[]     @relation("OutboundCreatedBy")
+  pickedSubmittedOutboundOrders OutboundOrder[]     @relation("OutboundPickedSubmittedBy")
+  verifiedOutboundOrders        OutboundOrder[]     @relation("OutboundVerifiedBy")
+  shippingStartedOutboundOrders OutboundOrder[]     @relation("OutboundShippingStartedBy")
+  deliveredOutboundOrders       OutboundOrder[]     @relation("OutboundDeliveredBy")
+  pickAllocations               PickAllocation[]    @relation("PickPickedBy")
+  returnReceivedReceipts        ReturnReceipt[]     @relation("ReturnReceivedBy")
+  returnDecidedReceipts         ReturnReceipt[]     @relation("ReturnDecidedBy")
+  returnCompletedReceipts       ReturnReceipt[]     @relation("ReturnCompletedBy")
+  returnLineDecisions           ReturnReceiptLine[] @relation("ReturnLineDecidedBy")
+  returnLineProcesses           ReturnReceiptLine[] @relation("ReturnLineProcessedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([companyId, email])
   @@index([companyId])
   @@index([role])
@@ -226,12 +226,18 @@ model RefreshToken {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  tokenHash String
+  tokenHash String @unique
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
 
-  @@index([userId])
+  deviceId   String?   // 프론트가 UUID로 생성해 저장해두면 좋음
+  deviceName String?
+  userAgent  String?
+  ip         String?
+
+  @@index([userId, revokedAt, createdAt])
+  @@index([userId, deviceId])
   @@index([expiresAt])
   @@index([tokenHash])
 }
@@ -378,7 +384,7 @@ model InboundUploadRow {
 /// plannedDate 기준으로 오늘~미래 출고 관리
 model OutboundOrder {
   id        String  @id @default(uuid())
-  orderNo   Int     @unique
+  orderNo   Int     @unique @default(autoincrement())
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -517,11 +523,11 @@ model ReturnReceipt {
   receivedByUser   User?   @relation("ReturnReceivedBy", fields: [receivedByUserId], references: [id], onDelete: SetNull)
 
   decidedByUserId String?
-  decidedByUser   User? @relation("ReturnDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  decidedByUser   User?     @relation("ReturnDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
   decidedAt       DateTime?
 
   completedByUserId String?
-  completedByUser   User? @relation("ReturnCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
+  completedByUser   User?     @relation("ReturnCompletedBy", fields: [completedByUserId], references: [id], onDelete: SetNull)
   completedAt       DateTime?
 
   lines ReturnReceiptLine[]
@@ -552,12 +558,12 @@ model ReturnReceiptLine {
   decision        ReturnLineDecision?
   decidedAt       DateTime?
   decidedByUserId String?
-  decidedByUser   User? @relation("ReturnLineDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  decidedByUser   User?               @relation("ReturnLineDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
 
   // 재고 반영(완료)
   processedAt       DateTime?
   processedByUserId String?
-  processedByUser   User? @relation("ReturnLineProcessedBy", fields: [processedByUserId], references: [id], onDelete: SetNull)
+  processedByUser   User?     @relation("ReturnLineProcessedBy", fields: [processedByUserId], references: [id], onDelete: SetNull)
 
   version   Int      @default(1)
   createdAt DateTime @default(now())

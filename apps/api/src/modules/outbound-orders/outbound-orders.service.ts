@@ -327,7 +327,6 @@ export class OutboundOrdersService {
           status: 'CANCELLED',
           pickedQty: 0,
           shippedQty: 0,
-          version: { increment: 1 },
         },
       });
 
@@ -336,7 +335,6 @@ export class OutboundOrdersService {
         where: { id: orderId },
         data: {
           status: OutboundStatus.CANCELLED,
-          version: { increment: 1 },
 
           // 검수/배송 관련 메타데이터 초기화
           pickedSubmittedByUserId: null,

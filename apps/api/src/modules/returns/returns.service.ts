@@ -415,14 +415,14 @@ export class ReturnsService {
               companyId_itemId_expiryDate: {
                 companyId,
                 itemId: line.itemId,
-                expiryDate: line.expiryDate ?? null,
+                expiryDate: line.expiryDate!,
               },
             },
             update: {},
             create: {
               companyId,
               itemId: line.itemId,
-              expiryDate: line.expiryDate ?? null,
+              expiryDate: line.expiryDate!,
             },
           });
 

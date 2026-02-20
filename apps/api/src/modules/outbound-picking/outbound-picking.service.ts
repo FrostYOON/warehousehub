@@ -13,6 +13,11 @@ type ReserveOptions = {
   forceReReserve?: boolean; // 주문 전체 재예약(가급적 사용 X)
 };
 
+// NOTE(version policy)
+// - OutboundOrder.version / OutboundLine.version 증가는 “사용자 편집(OrdersService)”에서만 수행한다.
+// - PickingService의 auto-reserve, submit 동기화, 수동픽 예약 등 내부 상태/수량 동기화는 version을 올리지 않는다.
+//   (version이 과도하게 증가해 UI/동시성 제어가 어려워지는 것을 방지)
+
 @Injectable()
 export class OutboundPickingService {
   constructor(private readonly prisma: PrismaService) {}
@@ -58,9 +63,11 @@ export class OutboundPickingService {
       // lineId별 합계
       const sumByLine = new Map<string, number>();
       for (const a of allocations) {
+        // pickedQty 기준으로 submit 시점에 라인 pickedQty를 동기화한다.
+        // (qty는 예약 수량, pickedQty는 실제 픽 체크 수량)
         sumByLine.set(
           a.outboundLineId,
-          (sumByLine.get(a.outboundLineId) ?? 0) + a.qty,
+          (sumByLine.get(a.outboundLineId) ?? 0) + (a.pickedQty ?? 0),
         );
       }
 
@@ -81,7 +88,6 @@ export class OutboundPickingService {
           where: { id: line.id },
           data: {
             pickedQty: picked,
-            version: { increment: 1 },
           },
         });
       }
@@ -90,7 +96,11 @@ export class OutboundPickingService {
         where: { id: orderId },
         data: {
           status: OutboundStatus.PICKED,
-          version: { increment: 1 },
+          // ✅ 픽 완료 제출 기록
+          pickedSubmittedAt: new Date(),
+          pickedSubmittedByUserId: userId,
+
+          // ✅ PICKED로 되돌아가면 검수/배송 메타는 무효
           verifiedAt: null,
           verifiedByUserId: null,
           shippingStartedAt: null,
@@ -175,7 +185,7 @@ export class OutboundPickingService {
       if (order.status !== OutboundStatus.PICKING) {
         await tx.outboundLine.updateMany({
           where: { orderId, status: 'ACTIVE' },
-          data: { pickedQty: 0, version: { increment: 1 } },
+          data: { pickedQty: 0 },
         });
       }
 
@@ -184,7 +194,6 @@ export class OutboundPickingService {
         where: { id: orderId },
         data: {
           status: OutboundStatus.PICKING,
-          version: { increment: 1 },
           verifiedAt: null,
           verifiedByUserId: null,
           shippingStartedAt: null,
@@ -195,10 +204,7 @@ export class OutboundPickingService {
       });
 
       // ✅ 해당 라인도 변경 이력(버전) 반영
-      await tx.outboundLine.update({
-        where: { id: line.id },
-        data: { version: { increment: 1 } },
-      });
+      // (Removed version increment update as per instructions)
 
       return { message: 'Manual pick reserved' };
     });
@@ -278,7 +284,6 @@ export class OutboundPickingService {
       where: { id: orderId },
       data: {
         status: OutboundStatus.PICKING,
-        version: { increment: 1 },
         verifiedAt: null,
         verifiedByUserId: null,
         shippingStartedAt: null,

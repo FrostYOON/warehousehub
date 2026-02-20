@@ -20,4 +20,12 @@ export class LoginDto {
   @ApiProperty({ example: 'WarehouseHub' })
   @IsString()
   companyName!: string;
+
+  @ApiProperty({ example: 'device-uuid-1234', required: false })
+  @IsString()
+  deviceId?: string;
+
+  @ApiProperty({ example: 'MacBook Pro', required: false })
+  @IsString()
+  deviceName?: string;
 }

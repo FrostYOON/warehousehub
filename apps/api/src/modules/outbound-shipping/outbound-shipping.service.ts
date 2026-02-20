@@ -1,7 +1,12 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryTxType, OutboundStatus } from '@prisma/client';
 
+@Injectable()
 export class OutboundShippingService {
   constructor(private readonly prisma: PrismaService) {}
 

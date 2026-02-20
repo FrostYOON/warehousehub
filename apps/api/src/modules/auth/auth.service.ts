@@ -18,6 +18,31 @@ import {
 
 const ACCESS_EXPIRES_IN = '15m';
 const REFRESH_EXPIRES_DAYS = 30;
+const MAX_ACTIVE_REFRESH_TOKENS = 5;
+
+type RefreshMeta = {
+  deviceId?: string;
+  deviceName?: string;
+  userAgent?: string;
+  ip?: string;
+};
+
+type RegisterDto = {
+  companyName: string;
+  email: string;
+  name: string;
+  password: string;
+  deviceId?: string;
+  deviceName?: string;
+};
+
+type LoginDto = {
+  companyName: string;
+  email: string;
+  password: string;
+  deviceId?: string;
+  deviceName?: string;
+};
 
 @Injectable()
 export class AuthService {
@@ -38,7 +63,19 @@ export class AuthService {
     );
   }
 
-  private async issueRefreshToken(userId: string) {
+  private async revokeActiveTokensForDevice(userId: string, deviceId?: string) {
+    if (!deviceId) return;
+
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, deviceId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  private async issueRefreshToken(userId: string, meta: RefreshMeta = {}) {
+    // ✅ deviceId가 있으면 같은 기기에서는 항상 1개만 활성 토큰 유지
+    await this.revokeActiveTokensForDevice(userId, meta.deviceId);
+
     const raw = generateRefreshToken();
     const tokenHash = hashToken(raw);
 
@@ -47,18 +84,32 @@ export class AuthService {
         userId,
         tokenHash,
         expiresAt: addDays(REFRESH_EXPIRES_DAYS),
+        deviceId: meta.deviceId,
+        deviceName: meta.deviceName,
+        userAgent: meta.userAgent,
+        ip: meta.ip,
       },
     });
+
+    // ✅ 유저당 활성 refresh token 상한 유지
+    const active = await this.prisma.refreshToken.findMany({
+      where: { userId, revokedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+
+    const toRevoke = active.slice(MAX_ACTIVE_REFRESH_TOKENS).map((t) => t.id);
+    if (toRevoke.length) {
+      await this.prisma.refreshToken.updateMany({
+        where: { id: { in: toRevoke } },
+        data: { revokedAt: new Date() },
+      });
+    }
 
     return raw;
   }
 
-  async register(dto: {
-    companyName: string;
-    email: string;
-    name: string;
-    password: string;
-  }) {
+  async register(dto: RegisterDto, meta: RefreshMeta = {}) {
     const passwordHash = await hashPassword(dto.password);
 
     const { company, user } = await this.users.createCompanyWithAdmin({
@@ -74,7 +125,12 @@ export class AuthService {
       role: user.role,
     });
 
-    const refreshToken = await this.issueRefreshToken(user.id);
+    const refreshToken = await this.issueRefreshToken(user.id, {
+      deviceId: dto.deviceId ?? meta.deviceId,
+      deviceName: dto.deviceName ?? meta.deviceName,
+      userAgent: meta.userAgent,
+      ip: meta.ip,
+    });
 
     return {
       accessToken,
@@ -90,7 +146,7 @@ export class AuthService {
     };
   }
 
-  async login(dto: { companyName: string; email: string; password: string }) {
+  async login(dto: LoginDto, meta: RefreshMeta = {}) {
     const company = await this.users.findCompanyByName(dto.companyName);
     if (!company) throw new UnauthorizedException('Invalid credentials');
 
@@ -106,7 +162,12 @@ export class AuthService {
       role: user.role,
     });
 
-    const refreshToken = await this.issueRefreshToken(user.id);
+    const refreshToken = await this.issueRefreshToken(user.id, {
+      deviceId: dto.deviceId ?? meta.deviceId,
+      deviceName: dto.deviceName ?? meta.deviceName,
+      userAgent: meta.userAgent,
+      ip: meta.ip,
+    });
 
     return {
       accessToken,
@@ -126,16 +187,26 @@ export class AuthService {
     const tokenHash = hashToken(refreshToken);
 
     const stored = await this.prisma.refreshToken.findFirst({
-      where: { tokenHash, revokedAt: null },
+      where: { tokenHash },
       include: { user: true },
     });
 
     if (!stored) throw new UnauthorizedException('Invalid refresh token');
-    if (stored.expiresAt <= new Date())
-      throw new UnauthorizedException('Refresh token expired');
     if (!stored.user.isActive) throw new UnauthorizedException();
 
-    // revoke old
+    // 🔒 reuse detection: already revoked token used again
+    if (stored.revokedAt) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: stored.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      throw new UnauthorizedException('Refresh token reuse detected');
+    }
+
+    if (stored.expiresAt <= new Date())
+      throw new UnauthorizedException('Refresh token expired');
+
+    // revoke old (rotate)
     await this.prisma.refreshToken.update({
       where: { id: stored.id },
       data: { revokedAt: new Date() },
@@ -147,7 +218,12 @@ export class AuthService {
       role: stored.user.role,
     });
 
-    const newRefreshToken = await this.issueRefreshToken(stored.userId);
+    const newRefreshToken = await this.issueRefreshToken(stored.userId, {
+      deviceId: stored.deviceId ?? undefined,
+      deviceName: stored.deviceName ?? undefined,
+      userAgent: stored.userAgent ?? undefined,
+      ip: stored.ip ?? undefined,
+    });
 
     return { accessToken, refreshToken: newRefreshToken };
   }

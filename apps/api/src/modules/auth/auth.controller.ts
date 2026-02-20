@@ -16,6 +16,22 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  private getRequestMeta(req: Request) {
+    const xff = req.headers['x-forwarded-for'];
+    const ip = Array.isArray(xff)
+      ? xff[0]
+      : typeof xff === 'string'
+        ? xff.split(',')[0].trim()
+        : req.ip;
+
+    const userAgent = req.headers['user-agent'] ?? undefined;
+
+    return {
+      ip: ip ?? undefined,
+      userAgent: typeof userAgent === 'string' ? userAgent : undefined,
+    };
+  }
+
   @Post('register')
   @ApiOkResponse({ type: LoginResponseDto })
   register(@Body() dto: RegisterDto) {
@@ -24,8 +40,8 @@ export class AuthController {
 
   @Post('login')
   @ApiOkResponse({ type: LoginResponseDto })
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto);
+  login(@Req() req: Request, @Body() dto: LoginDto) {
+    return this.auth.login(dto, this.getRequestMeta(req));
   }
 
   @Post('refresh')
