@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Param,
@@ -52,7 +53,7 @@ export class InboundController {
     @Req() req: Request,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    if (!file) throw new Error('file is required');
+    if (!file) throw new BadRequestException('file is required');
     return this.inbound.createUpload({
       companyId: req.user!.companyId,
       userId: req.user!.userId,

@@ -102,12 +102,7 @@ export class ReturnsService {
   //   * 기존 라인 수정: patch.id 필수
   //   * 라인 추가: patch.id 없이 itemId/storageType/qty 필수
   //   * 라인 삭제: patch.id + patch.isDeleted = true
-  async update(
-    companyId: string,
-    userId: string,
-    id: string,
-    dto: UpdateReturnReceiptDto,
-  ) {
+  async update(companyId: string, id: string, dto: UpdateReturnReceiptDto) {
     return this.prisma.$transaction(async (tx) => {
       const receipt = await tx.returnReceipt.findFirst({
         where: { id, companyId },
@@ -131,8 +126,8 @@ export class ReturnsService {
       // 라인 변경이 있는 경우 itemId 검증(회사 범위)
       if (dto.lines?.length) {
         const candidateItemIds = dto.lines
-          .map((p: any) => p.itemId)
-          .filter((v: any) => typeof v === 'string');
+          .map((p) => p.itemId)
+          .filter((v): v is string => typeof v === 'string');
         const uniq = Array.from(new Set(candidateItemIds));
         if (uniq.length) {
           const items = await tx.item.findMany({
@@ -162,7 +157,7 @@ export class ReturnsService {
       if (dto.lines?.length) {
         const existingById = new Map(receipt.lines.map((l) => [l.id, l]));
 
-        for (const patch of dto.lines as any[]) {
+        for (const patch of dto.lines) {
           const isDeleted = patch.isDeleted === true;
 
           // 4-1) 기존 라인 수정/삭제
@@ -191,11 +186,11 @@ export class ReturnsService {
 
                 qty: patch.qty ?? undefined,
                 expiryDate:
-                  patch.expiryDate === undefined
-                    ? undefined
-                    : patch.expiryDate
-                      ? new Date(patch.expiryDate)
-                      : null,
+                  patch.clearExpiryDate === true
+                    ? null
+                    : patch.expiryDate === undefined
+                      ? undefined
+                      : new Date(patch.expiryDate),
 
                 version: { increment: 1 },
                 updatedAt: new Date(),
@@ -241,7 +236,7 @@ export class ReturnsService {
   }
 
   // 4-1) 접수 취소 (RECEIVED에서만)
-  async cancel(companyId: string, userId: string, id: string) {
+  async cancel(companyId: string, id: string) {
     return this.prisma.$transaction(async (tx) => {
       const receipt = await tx.returnReceipt.findFirst({
         where: { id, companyId },
@@ -297,7 +292,7 @@ export class ReturnsService {
         await tx.returnReceiptLine.update({
           where: { id: d.lineId },
           data: {
-            decision: d.decision as ReturnLineDecision,
+            decision: d.decision,
             decidedByUserId: userId,
             decidedAt: new Date(),
             version: { increment: 1 },
@@ -409,22 +404,47 @@ export class ReturnsService {
               'Warehouse not found for storageType',
             );
 
-          // Lot upsert(회사+item+expiryDate 유니크)
-          const lot = await tx.lot.upsert({
-            where: {
-              companyId_itemId_expiryDate: {
+          // 유통기한 nullable 이므로 null/날짜를 분기해 lot 확보
+          let lot: { id: string };
+          if (line.expiryDate === null) {
+            const existingLot = await tx.lot.findFirst({
+              where: {
                 companyId,
                 itemId: line.itemId,
-                expiryDate: line.expiryDate!,
+                expiryDate: null,
               },
-            },
-            update: {},
-            create: {
-              companyId,
-              itemId: line.itemId,
-              expiryDate: line.expiryDate!,
-            },
-          });
+              select: { id: true },
+            });
+            if (!existingLot) {
+              lot = await tx.lot.create({
+                data: {
+                  companyId,
+                  itemId: line.itemId,
+                  expiryDate: null,
+                },
+                select: { id: true },
+              });
+            } else {
+              lot = existingLot;
+            }
+          } else {
+            lot = await tx.lot.upsert({
+              where: {
+                companyId_itemId_expiryDate: {
+                  companyId,
+                  itemId: line.itemId,
+                  expiryDate: line.expiryDate,
+                },
+              },
+              update: {},
+              create: {
+                companyId,
+                itemId: line.itemId,
+                expiryDate: line.expiryDate,
+              },
+              select: { id: true },
+            });
+          }
 
           // Stock upsert(회사+warehouse+lot 유니크)
           await tx.stock.upsert({

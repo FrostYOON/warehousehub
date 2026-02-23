@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageType } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 
 type ParsedRow = {
@@ -25,14 +26,30 @@ const REQUIRED_COLUMNS = [
   'ExpiryDate',
 ] as const;
 
+function toCellString(raw: unknown): string {
+  if (raw === null || raw === undefined) return '';
+  if (typeof raw === 'string') return raw;
+  if (
+    typeof raw === 'number' ||
+    typeof raw === 'boolean' ||
+    typeof raw === 'bigint'
+  ) {
+    return String(raw);
+  }
+  if (raw instanceof Date) return raw.toISOString();
+  return '';
+}
+
+function errorMessageOf(error: unknown): string {
+  return error instanceof Error ? error.message : 'Invalid row';
+}
+
 @Injectable()
 export class InboundService {
   constructor(private readonly prisma: PrismaService) {}
 
   private parseStorageType(raw: unknown): StorageType {
-    const v = String(raw ?? '')
-      .trim()
-      .toUpperCase();
+    const v = toCellString(raw).trim().toUpperCase();
     if (v === 'DRY') return StorageType.DRY;
     if (v === 'COOL') return StorageType.COOL;
     if (v === 'FRZ') return StorageType.FRZ;
@@ -43,13 +60,13 @@ export class InboundService {
     if (raw === null || raw === undefined) return null;
 
     // 1) "-" / 빈값 처리
-    const s = String(raw).trim();
+    const s = toCellString(raw).trim();
     if (!s || s === '-') return null;
 
     // 2) Date 객체로 들어오는 케이스 (cellDates: true)
     if (raw instanceof Date) {
       if (Number.isNaN(raw.getTime()))
-        throw new Error(`Invalid expiryDate: ${raw}`);
+        throw new Error(`Invalid expiryDate: ${raw.toISOString()}`);
       // 날짜만 쓰고 싶으면 UTC 00:00으로 정규화(선택)
       return new Date(
         Date.UTC(raw.getUTCFullYear(), raw.getUTCMonth(), raw.getUTCDate()),
@@ -90,9 +107,9 @@ export class InboundService {
   }
 
   private parseQuantity(raw: unknown): number {
-    const n = Number(String(raw ?? '').trim());
+    const n = Number(toCellString(raw).trim());
     if (!Number.isFinite(n) || n <= 0)
-      throw new Error(`Invalid quantity: ${raw}`);
+      throw new Error(`Invalid quantity: ${toCellString(raw)}`);
     return Math.floor(n);
   }
 
@@ -108,7 +125,7 @@ export class InboundService {
     if (!sheetName) throw new Error('No sheet found');
 
     const sheet = wb.Sheets[sheetName];
-    const json: Record<string, any>[] = XLSX.utils.sheet_to_json(sheet, {
+    const json: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
       defval: '',
       raw: true,
     });
@@ -140,12 +157,12 @@ export class InboundService {
           isValid,
           errorMessage,
         };
-      } catch (e: any) {
+      } catch (e: unknown) {
         isValid = false;
-        errorMessage = `Row ${rowNo}: ${e.message ?? 'Invalid row'}`;
+        errorMessage = `Row ${rowNo}: ${errorMessageOf(e)}`;
         return {
-          itemCode: String(r['ItemCode'] ?? '').trim(),
-          itemName: String(r['ItemName'] ?? '').trim(),
+          itemCode: toCellString(r['ItemCode']).trim(),
+          itemName: toCellString(r['ItemName']).trim(),
           storageType: StorageType.DRY, // 임시값(유효하지 않으면 무시됨)
           quantity: 0,
           expiryDate: null,
@@ -222,7 +239,7 @@ export class InboundService {
       throw new BadRequestException('Cannot confirm: invalid rows exist');
 
     // 트랜잭션 시작
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // InventoryTx 생성
       const inventoryTx = await tx.inventoryTx.create({
         data: {
@@ -243,36 +260,39 @@ export class InboundService {
               itemCode: row.itemCode,
             },
           },
-          update: {
-            itemName: row.itemName,
-          },
+          update: { itemName: row.itemName },
           create: {
             companyId,
             itemCode: row.itemCode,
             itemName: row.itemName,
           },
+          select: { id: true },
         });
 
         // 2️⃣ Lot get or create (null 처리 포함)
-        let lot;
+        let lot: { id: string };
 
         if (row.expiryDate === null) {
-          lot = await tx.lot.findFirst({
+          const existingLot = await tx.lot.findFirst({
             where: {
               companyId,
               itemId: item.id,
               expiryDate: null,
             },
+            select: { id: true },
           });
 
-          if (!lot) {
+          if (!existingLot) {
             lot = await tx.lot.create({
               data: {
                 companyId,
                 itemId: item.id,
                 expiryDate: null,
               },
+              select: { id: true },
             });
+          } else {
+            lot = existingLot;
           }
         } else {
           lot = await tx.lot.upsert({
@@ -289,6 +309,7 @@ export class InboundService {
               itemId: item.id,
               expiryDate: row.expiryDate,
             },
+            select: { id: true },
           });
         }
 
@@ -298,6 +319,7 @@ export class InboundService {
             companyId,
             type: row.storageType,
           },
+          select: { id: true },
         });
 
         if (!warehouse)

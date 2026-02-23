@@ -1,7 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -10,11 +12,28 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { StorageType } from '@prisma/client';
 
-class UpdateReturnLineDto {
-  @ApiPropertyOptional()
+export class UpdateReturnLineDto {
+  @ApiPropertyOptional({ description: '기존 라인 수정/삭제 시 라인 ID' })
+  @IsOptional()
   @IsUUID()
-  id!: string;
+  id?: string;
+
+  @ApiPropertyOptional({ description: 'true면 해당 라인 삭제' })
+  @IsOptional()
+  @IsBoolean()
+  isDeleted?: boolean;
+
+  @ApiPropertyOptional({ description: '상품 변경/신규 라인 생성 시 itemId' })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
+  @ApiPropertyOptional({ enum: StorageType })
+  @IsOptional()
+  @IsEnum(StorageType)
+  storageType?: StorageType;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -30,10 +49,10 @@ class UpdateReturnLineDto {
   @IsDateString()
   expiryDate?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '유통기한 제거 시 true' })
   @IsOptional()
-  @IsString()
-  storageType?: any; // StorageType은 변경 안 받을 거면 제거해도 됨
+  @IsBoolean()
+  clearExpiryDate?: boolean;
 }
 
 export class UpdateReturnReceiptDto {
@@ -52,7 +71,7 @@ export class UpdateReturnReceiptDto {
   @IsString()
   memo?: string;
 
-  // 라인 qty/expiryDate 수정용 (라인 추가/삭제는 다음 단계에서 확장)
+  // 라인 수정/추가/삭제를 모두 지원
   @ApiPropertyOptional({ type: [UpdateReturnLineDto] })
   @IsOptional()
   @IsArray()

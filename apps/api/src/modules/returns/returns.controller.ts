@@ -56,14 +56,14 @@ export class ReturnsController {
     @Param('id') id: string,
     @Body() dto: UpdateReturnReceiptDto,
   ) {
-    return this.returns.update(req.user!.companyId, req.user!.userId, id, dto);
+    return this.returns.update(req.user!.companyId, id, dto);
   }
 
   // 접수 취소: DELIVERY, SALES, ADMIN (RECEIVED 상태에서만)
   @Patch(':id/cancel')
   @Roles(Role.ADMIN, Role.DELIVERY, Role.SALES)
   cancel(@Req() req: Request, @Param('id') id: string) {
-    return this.returns.cancel(req.user!.companyId, req.user!.userId, id);
+    return this.returns.cancel(req.user!.companyId, id);
   }
 
   // 결정: WH_MANAGER, ADMIN (RECEIVED -> DECIDED)
