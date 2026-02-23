@@ -45,6 +45,12 @@ export class OutboundOrdersService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await this.ensureItemsBelongToCompanyTx(
+        tx,
+        companyId,
+        dto.lines.map((line) => line.itemId),
+      );
+
       const customer = await tx.customer.findFirst({
         where: { id: dto.customerId, companyId },
       });
@@ -111,6 +117,8 @@ export class OutboundOrdersService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      await this.ensureItemsBelongToCompanyTx(tx, companyId, [itemId]);
+
       const order = await tx.outboundOrder.findFirst({
         where: { id: orderId, companyId },
         select: { id: true, status: true },
@@ -411,6 +419,24 @@ export class OutboundOrdersService {
           deliveredAt: null,
         },
       });
+    }
+  }
+
+  private async ensureItemsBelongToCompanyTx(
+    tx: Tx,
+    companyId: string,
+    itemIds: string[],
+  ) {
+    const uniqueItemIds = Array.from(new Set(itemIds));
+    if (uniqueItemIds.length === 0) return;
+
+    const items = await tx.item.findMany({
+      where: { companyId, id: { in: uniqueItemIds } },
+      select: { id: true },
+    });
+
+    if (items.length !== uniqueItemIds.length) {
+      throw new BadRequestException('Invalid itemId for company');
     }
   }
 }
