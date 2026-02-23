@@ -71,4 +71,4 @@ async function bootstrap() {
   console.log(`Server is running on port ${port}`);
   console.log(`Swagger is running on port ${port}/api`);
 }
-bootstrap();
+void bootstrap();

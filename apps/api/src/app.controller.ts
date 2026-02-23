@@ -21,7 +21,7 @@ export class AppController {
     try {
       await this.prisma.$executeRawUnsafe(`SELECT 1`);
       return { ok: true, db: 'connected' };
-    } catch (error) {
+    } catch {
       return { ok: false, db: 'disconnected' };
     }
   }
