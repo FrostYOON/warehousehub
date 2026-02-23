@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -7,16 +11,52 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private normalizeRequiredString(value: string, field: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new BadRequestException(`${field} is required`);
+    }
+    return trimmed;
+  }
+
+  private normalizeOptionalStringForCreate(value?: string): string | null {
+    if (value === undefined) return null;
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  private normalizeOptionalStringForUpdate(
+    value?: string,
+  ): string | null | undefined {
+    if (value === undefined) return undefined;
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  private normalizeRequiredStringForUpdate(
+    value: string | undefined,
+    field: string,
+  ): string | undefined {
+    if (value === undefined) return undefined;
+    return this.normalizeRequiredString(value, field);
+  }
+
   create(companyId: string, dto: CreateCustomerDto) {
     return this.prisma.customer.create({
       data: {
         companyId,
-        customerName: dto.customerName.trim(),
-        customerAddress: dto.customerAddress.trim(),
-        postalCode: dto.postalCode?.trim() || null,
-        city: dto.city?.trim() || null,
-        state: dto.state?.trim() || null,
-        country: dto.country?.trim() || null,
+        customerName: this.normalizeRequiredString(
+          dto.customerName,
+          'customerName',
+        ),
+        customerAddress: this.normalizeRequiredString(
+          dto.customerAddress,
+          'customerAddress',
+        ),
+        postalCode: this.normalizeOptionalStringForCreate(dto.postalCode),
+        city: this.normalizeOptionalStringForCreate(dto.city),
+        state: this.normalizeOptionalStringForCreate(dto.state),
+        country: this.normalizeOptionalStringForCreate(dto.country),
         lat: dto.lat ?? null,
         lng: dto.lng ?? null,
       },
@@ -54,12 +94,18 @@ export class CustomersService {
     return this.prisma.customer.update({
       where: { id },
       data: {
-        customerName: dto.customerName?.trim(),
-        customerAddress: dto.customerAddress?.trim(),
-        postalCode: dto.postalCode?.trim(),
-        city: dto.city?.trim(),
-        state: dto.state?.trim(),
-        country: dto.country?.trim(),
+        customerName: this.normalizeRequiredStringForUpdate(
+          dto.customerName,
+          'customerName',
+        ),
+        customerAddress: this.normalizeRequiredStringForUpdate(
+          dto.customerAddress,
+          'customerAddress',
+        ),
+        postalCode: this.normalizeOptionalStringForUpdate(dto.postalCode),
+        city: this.normalizeOptionalStringForUpdate(dto.city),
+        state: this.normalizeOptionalStringForUpdate(dto.state),
+        country: this.normalizeOptionalStringForUpdate(dto.country),
         lat: dto.lat,
         lng: dto.lng,
       },
