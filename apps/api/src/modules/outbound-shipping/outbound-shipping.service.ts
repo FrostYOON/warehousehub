@@ -89,6 +89,13 @@ export class OutboundShippingService {
 
       // 1) 재고 커밋: reserved 감소 + onHand 감소
       for (const alloc of allocations) {
+        const committedQty = alloc.pickedQty > 0 ? alloc.pickedQty : alloc.qty;
+        if (committedQty > alloc.qty) {
+          throw new BadRequestException(
+            `Picked quantity exceeds reserved quantity (allocationId=${alloc.id})`,
+          );
+        }
+
         await tx.stock.update({
           where: {
             companyId_warehouseId_lotId: {
@@ -98,8 +105,10 @@ export class OutboundShippingService {
             },
           },
           data: {
+            // 배송 완료 시점에 미픽 물량은 예약 해제되고,
+            // 실제 픽 물량만 onHand에서 차감된다.
             reserved: { decrement: alloc.qty },
-            onHand: { decrement: alloc.qty },
+            onHand: { decrement: committedQty },
           },
         });
 
@@ -113,9 +122,10 @@ export class OutboundShippingService {
       // 커밋된 allocation 수량(=이번 complete에서 처리한 allocations)의 라인별 합계를 shippedQty로 기록
       const shippedByLineId = new Map<string, number>();
       for (const a of allocations) {
+        const committedQty = a.pickedQty > 0 ? a.pickedQty : a.qty;
         shippedByLineId.set(
           a.outboundLineId,
-          (shippedByLineId.get(a.outboundLineId) ?? 0) + a.qty,
+          (shippedByLineId.get(a.outboundLineId) ?? 0) + committedQty,
         );
       }
 
