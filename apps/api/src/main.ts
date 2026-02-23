@@ -5,14 +5,31 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // CORS (개발용: web/mobile 붙을 때 편하게)
+  const cfg = app.get(ConfigService);
+  const port = cfg.get<number>('API_PORT', 3001);
+
+  app.use(cookieParser());
+
+  // CORS (web 붙을 때: HttpOnly cookie 사용하려면 credentials + 정확한 origin 필요)
+  const webOrigin = cfg.get<string>('CORS_ORIGIN', 'http://localhost:3000');
+
   app.enableCors({
-    origin: true,
+    origin: [webOrigin],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Device-Id',
+      'X-Device-Name',
+      'X-Client-Device-Id',
+      'X-Client-Device-Name',
+    ],
   });
 
   app.useGlobalPipes(
@@ -27,9 +44,6 @@ async function bootstrap() {
   );
 
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
-
-  const cfg = app.get(ConfigService);
-  const port = cfg.get<number>('API_PORT', 3001);
 
   // Swagger
   const config = new DocumentBuilder()

@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  BadRequestException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
@@ -15,33 +11,14 @@ import {
   generateRefreshToken,
   hashToken,
 } from '../../common/utils/token.util';
+import type { RegisterDto } from './dto/register.dto';
+import type { LoginDto } from './dto/login.dto';
+import type { RequestMeta } from './http/decorators/req-meta.decorator';
 
-const ACCESS_EXPIRES_IN = '15m';
-const REFRESH_EXPIRES_DAYS = 30;
-const MAX_ACTIVE_REFRESH_TOKENS = 5;
-
-type RefreshMeta = {
-  deviceId?: string;
-  deviceName?: string;
-  userAgent?: string;
-  ip?: string;
-};
-
-type RegisterDto = {
-  companyName: string;
-  email: string;
-  name: string;
-  password: string;
-  deviceId?: string;
-  deviceName?: string;
-};
-
-type LoginDto = {
-  companyName: string;
-  email: string;
-  password: string;
-  deviceId?: string;
-  deviceName?: string;
+type AccessTokenPayload = {
+  userId: string;
+  companyId: string;
+  role: string;
 };
 
 @Injectable()
@@ -52,64 +29,7 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
 
-  private issueAccessToken(params: {
-    userId: string;
-    companyId: string;
-    role: string;
-  }) {
-    return this.jwt.signAsync(
-      { sub: params.userId, companyId: params.companyId, role: params.role },
-      { expiresIn: ACCESS_EXPIRES_IN },
-    );
-  }
-
-  private async revokeActiveTokensForDevice(userId: string, deviceId?: string) {
-    if (!deviceId) return;
-
-    await this.prisma.refreshToken.updateMany({
-      where: { userId, deviceId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-  }
-
-  private async issueRefreshToken(userId: string, meta: RefreshMeta = {}) {
-    // ✅ deviceId가 있으면 같은 기기에서는 항상 1개만 활성 토큰 유지
-    await this.revokeActiveTokensForDevice(userId, meta.deviceId);
-
-    const raw = generateRefreshToken();
-    const tokenHash = hashToken(raw);
-
-    await this.prisma.refreshToken.create({
-      data: {
-        userId,
-        tokenHash,
-        expiresAt: addDays(REFRESH_EXPIRES_DAYS),
-        deviceId: meta.deviceId,
-        deviceName: meta.deviceName,
-        userAgent: meta.userAgent,
-        ip: meta.ip,
-      },
-    });
-
-    // ✅ 유저당 활성 refresh token 상한 유지
-    const active = await this.prisma.refreshToken.findMany({
-      where: { userId, revokedAt: null },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true },
-    });
-
-    const toRevoke = active.slice(MAX_ACTIVE_REFRESH_TOKENS).map((t) => t.id);
-    if (toRevoke.length) {
-      await this.prisma.refreshToken.updateMany({
-        where: { id: { in: toRevoke } },
-        data: { revokedAt: new Date() },
-      });
-    }
-
-    return raw;
-  }
-
-  async register(dto: RegisterDto, meta: RefreshMeta = {}) {
+  async register(dto: RegisterDto, meta: RequestMeta) {
     const passwordHash = await hashPassword(dto.password);
 
     const { company, user } = await this.users.createCompanyWithAdmin({
@@ -146,7 +66,7 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto, meta: RefreshMeta = {}) {
+  async login(dto: LoginDto, meta: RequestMeta = {}) {
     const company = await this.users.findCompanyByName(dto.companyName);
     if (!company) throw new UnauthorizedException('Invalid credentials');
 
@@ -183,7 +103,7 @@ export class AuthService {
     };
   }
 
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string, meta: RequestMeta = {}) {
     const tokenHash = hashToken(refreshToken);
 
     const stored = await this.prisma.refreshToken.findFirst({
@@ -219,10 +139,10 @@ export class AuthService {
     });
 
     const newRefreshToken = await this.issueRefreshToken(stored.userId, {
-      deviceId: stored.deviceId ?? undefined,
-      deviceName: stored.deviceName ?? undefined,
-      userAgent: stored.userAgent ?? undefined,
-      ip: stored.ip ?? undefined,
+      deviceId: meta.deviceId ?? stored.deviceId ?? undefined,
+      deviceName: meta.deviceName ?? stored.deviceName ?? undefined,
+      userAgent: meta.userAgent ?? stored.userAgent ?? undefined,
+      ip: meta.ip ?? stored.ip ?? undefined,
     });
 
     return { accessToken, refreshToken: newRefreshToken };
@@ -264,5 +184,35 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
     return { ok: true };
+  }
+
+  private async issueAccessToken(payload: AccessTokenPayload): Promise<string> {
+    return this.jwt.signAsync({
+      sub: payload.userId,
+      companyId: payload.companyId,
+      role: payload.role,
+    });
+  }
+
+  private async issueRefreshToken(
+    userId: string,
+    meta: RequestMeta = {},
+  ): Promise<string> {
+    const refreshToken = generateRefreshToken();
+    const tokenHash = hashToken(refreshToken);
+
+    await this.prisma.refreshToken.create({
+      data: {
+        userId,
+        tokenHash,
+        expiresAt: addDays(30),
+        deviceId: meta.deviceId,
+        deviceName: meta.deviceName,
+        userAgent: meta.userAgent,
+        ip: meta.ip,
+      },
+    });
+
+    return refreshToken;
   }
 }

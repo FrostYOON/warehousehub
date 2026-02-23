@@ -21,9 +21,6 @@ export class MeResponseDto {
 }
 
 export class LoginResponseDto {
-  @ApiProperty({ example: 'jwt_token_here' })
-  accessToken!: string;
-
   @ApiProperty({ type: MeResponseDto })
   user!: MeResponseDto;
 }
