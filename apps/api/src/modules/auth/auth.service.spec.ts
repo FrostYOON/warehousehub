@@ -1,8 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
+import { comparePassword } from '../../common/utils/password.util';
+
+jest.mock('../../common/utils/password.util', () => ({
+  hashPassword: jest.fn(),
+  comparePassword: jest.fn(),
+}));
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -29,6 +36,8 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -43,5 +52,218 @@ describe('AuthService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('login', () => {
+    it('throws unauthorized when company does not exist', async () => {
+      usersMock.findCompanyByName.mockResolvedValueOnce(null);
+
+      await expect(
+        service.login({
+          companyName: 'acme',
+          email: 'a@a.com',
+          password: 'pw',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('throws unauthorized when password mismatch', async () => {
+      usersMock.findCompanyByName.mockResolvedValueOnce({ id: 'company-1' });
+      usersMock.findActiveUserByEmail.mockResolvedValueOnce({
+        id: 'user-1',
+        role: 'ADMIN',
+        passwordHash: 'hashed',
+      });
+      (comparePassword as jest.Mock).mockResolvedValueOnce(false);
+
+      await expect(
+        service.login({
+          companyName: 'acme',
+          email: 'a@a.com',
+          password: 'pw',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('issues access and refresh token on valid credentials', async () => {
+      usersMock.findCompanyByName.mockResolvedValueOnce({
+        id: 'company-1',
+        name: 'ACME',
+      });
+      usersMock.findActiveUserByEmail.mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'a@a.com',
+        name: 'Alice',
+        role: 'ADMIN',
+        passwordHash: 'hashed',
+      });
+      (comparePassword as jest.Mock).mockResolvedValueOnce(true);
+      jwtMock.signAsync.mockResolvedValueOnce('access-token');
+      prismaMock.refreshToken.create.mockResolvedValueOnce({});
+
+      const result = await service.login(
+        { companyName: 'acme', email: 'a@a.com', password: 'pw' },
+        { deviceId: 'dev-1', deviceName: 'Mac', ip: '127.0.0.1' },
+      );
+
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toEqual(expect.any(String));
+      const createCalls = prismaMock.refreshToken.create.mock
+        .calls as unknown as [
+        [
+          {
+            data: {
+              userId: string;
+              deviceId?: string;
+              deviceName?: string;
+              ip?: string;
+              tokenHash: string;
+              expiresAt: Date;
+            };
+          },
+        ]?,
+      ];
+      const createCall = createCalls[0]?.[0] as {
+        data: {
+          userId: string;
+          deviceId?: string;
+          deviceName?: string;
+          ip?: string;
+          tokenHash: string;
+          expiresAt: Date;
+        };
+      };
+      expect(createCall.data.userId).toBe('user-1');
+      expect(createCall.data.deviceId).toBe('dev-1');
+      expect(createCall.data.deviceName).toBe('Mac');
+      expect(createCall.data.ip).toBe('127.0.0.1');
+      expect(typeof createCall.data.tokenHash).toBe('string');
+      expect(createCall.data.expiresAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('refresh', () => {
+    it('throws on revoked token reuse and revokes remaining active tokens', async () => {
+      prismaMock.refreshToken.findFirst.mockResolvedValueOnce({
+        id: 'rt-1',
+        userId: 'user-1',
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 3600_000),
+        user: { isActive: true, companyId: 'company-1', role: 'ADMIN' },
+      });
+
+      await expect(service.refresh('refresh-token')).rejects.toThrow(
+        'Refresh token reuse detected',
+      );
+      const updateManyCalls = prismaMock.refreshToken.updateMany.mock
+        .calls as unknown as [
+        [
+          {
+            where: { userId: string; revokedAt: null };
+            data: { revokedAt: Date };
+          },
+        ]?,
+      ];
+      const updateManyCall = updateManyCalls[0]?.[0] as {
+        where: { userId: string; revokedAt: null };
+        data: { revokedAt: Date };
+      };
+      expect(updateManyCall.where).toEqual({
+        userId: 'user-1',
+        revokedAt: null,
+      });
+      expect(updateManyCall.data.revokedAt).toBeInstanceOf(Date);
+    });
+
+    it('rotates refresh token and returns new token pair', async () => {
+      prismaMock.refreshToken.findFirst.mockResolvedValueOnce({
+        id: 'rt-1',
+        userId: 'user-1',
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 3600_000),
+        deviceId: 'stored-device',
+        deviceName: 'stored-name',
+        userAgent: 'stored-agent',
+        ip: '1.1.1.1',
+        user: { isActive: true, companyId: 'company-1', role: 'ADMIN' },
+      });
+      prismaMock.refreshToken.update.mockResolvedValueOnce({});
+      jwtMock.signAsync.mockResolvedValueOnce('new-access');
+      prismaMock.refreshToken.create.mockResolvedValueOnce({});
+
+      const result = await service.refresh('old-refresh', {
+        deviceName: 'override-device-name',
+      });
+
+      const updateCalls = prismaMock.refreshToken.update.mock
+        .calls as unknown as [
+        [{ where: { id: string }; data: { revokedAt: Date } }]?,
+      ];
+      const updateCall = updateCalls[0]?.[0] as {
+        where: { id: string };
+        data: { revokedAt: Date };
+      };
+      expect(updateCall.where).toEqual({ id: 'rt-1' });
+      expect(updateCall.data.revokedAt).toBeInstanceOf(Date);
+
+      const rotatedCreateCalls = prismaMock.refreshToken.create.mock
+        .calls as unknown as [
+        [
+          {
+            data: {
+              userId: string;
+              deviceId?: string;
+              deviceName?: string;
+              userAgent?: string;
+              ip?: string;
+            };
+          },
+        ]?,
+      ];
+      const rotatedCreateCall = rotatedCreateCalls[0]?.[0] as {
+        data: {
+          userId: string;
+          deviceId?: string;
+          deviceName?: string;
+          userAgent?: string;
+          ip?: string;
+        };
+      };
+      expect(rotatedCreateCall.data.userId).toBe('user-1');
+      expect(rotatedCreateCall.data.deviceId).toBe('stored-device');
+      expect(rotatedCreateCall.data.deviceName).toBe('override-device-name');
+      expect(rotatedCreateCall.data.userAgent).toBe('stored-agent');
+      expect(rotatedCreateCall.data.ip).toBe('1.1.1.1');
+      expect(result.accessToken).toBe('new-access');
+      expect(result.refreshToken).toEqual(expect.any(String));
+    });
+  });
+
+  describe('logout', () => {
+    it('revokes active matching token by hash', async () => {
+      prismaMock.refreshToken.updateMany.mockResolvedValueOnce({ count: 1 });
+
+      await service.logout('refresh-token');
+
+      const updateManyCalls = prismaMock.refreshToken.updateMany.mock
+        .calls as unknown as [
+        [
+          {
+            where: { tokenHash: string; revokedAt: null };
+            data: { revokedAt: Date };
+          },
+        ]?,
+      ];
+      const updateManyCall = updateManyCalls[0]?.[0] as {
+        where: {
+          tokenHash: string;
+          revokedAt: null;
+        };
+        data: { revokedAt: Date };
+      };
+      expect(typeof updateManyCall.where.tokenHash).toBe('string');
+      expect(updateManyCall.where.revokedAt).toBeNull();
+      expect(updateManyCall.data.revokedAt).toBeInstanceOf(Date);
+    });
   });
 });
