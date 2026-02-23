@@ -63,11 +63,13 @@ export class OutboundPickingService {
       // lineId별 합계
       const sumByLine = new Map<string, number>();
       for (const a of allocations) {
-        // pickedQty 기준으로 submit 시점에 라인 pickedQty를 동기화한다.
-        // (qty는 예약 수량, pickedQty는 실제 픽 체크 수량)
+        // pickedQty는 "실제 픽 체크 수량"이다.
+        // 다만 아직 pickedQty 갱신 경로가 없는 allocation은 qty를 fallback으로 사용해
+        // submit 시 0으로 떨어지는 비정상 케이스를 방지한다.
+        const picked = a.pickedQty > 0 ? a.pickedQty : a.qty;
         sumByLine.set(
           a.outboundLineId,
-          (sumByLine.get(a.outboundLineId) ?? 0) + (a.pickedQty ?? 0),
+          (sumByLine.get(a.outboundLineId) ?? 0) + picked,
         );
       }
 
