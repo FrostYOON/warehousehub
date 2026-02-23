@@ -12,11 +12,9 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findActiveUserByEmail(companyId: string, email: string) {
-    const user = await this.prisma.user.findFirst({
+    return this.prisma.user.findFirst({
       where: { companyId, email, isActive: true },
     });
-    if (!user) throw new NotFoundException('User not found');
-    return user;
   }
 
   async findUserById(userId: string) {
@@ -26,9 +24,7 @@ export class UsersService {
   }
 
   async findCompanyByName(name: string) {
-    const company = await this.prisma.company.findUnique({ where: { name } });
-    if (!company) throw new NotFoundException('Company not found');
-    return company;
+    return this.prisma.company.findUnique({ where: { name } });
   }
 
   async createCompanyWithAdmin(params: {
