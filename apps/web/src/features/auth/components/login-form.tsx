@@ -1,34 +1,23 @@
 'use client';
 
-import { useState } from 'react';
-import { api } from '@/lib/api';
+import { useLoginForm } from '@/features/auth/hooks/use-login-form';
 
-export default function LoginPage() {
-  const [companyName, setCompanyName] = useState('WarehouseHub');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [err, setErr] = useState<string | null>(null);
+export function LoginForm() {
+  const {
+    companyName,
+    email,
+    password,
+    error,
+    submitting,
+    setCompanyName,
+    setEmail,
+    setPassword,
+    submit,
+  } = useLoginForm();
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErr(null);
-
-    try {
-      const res = await api.post('/auth/login', {
-        companyName,
-        email,
-        password,
-      });
-      // access/refresh token은 api.ts에서 Cookies로 저장하는 구조가 아니라서 여기서 저장 필요
-      // (간단히 페이지에서 저장)
-      const Cookies = (await import('js-cookie')).default;
-      Cookies.set('accessToken', res.data.accessToken);
-      Cookies.set('refreshToken', res.data.refreshToken);
-
-      window.location.href = '/app';
-    } catch (e: any) {
-      setErr(e?.response?.data?.message ?? 'Login failed');
-    }
+    await submit();
   }
 
   return (
@@ -45,6 +34,7 @@ export default function LoginPage() {
             className="w-full border rounded px-3 py-2"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
+            disabled={submitting}
           />
         </div>
 
@@ -54,6 +44,7 @@ export default function LoginPage() {
             className="w-full border rounded px-3 py-2"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={submitting}
           />
         </div>
 
@@ -64,13 +55,18 @@ export default function LoginPage() {
             className="w-full border rounded px-3 py-2"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            disabled={submitting}
           />
         </div>
 
-        {err && <p className="text-sm text-red-600">{err}</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <button className="w-full bg-black text-white rounded px-3 py-2">
-          Sign in
+        <button
+          type="submit"
+          disabled={submitting}
+          className="w-full bg-black text-white rounded px-3 py-2 disabled:opacity-50"
+        >
+          {submitting ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
     </div>
