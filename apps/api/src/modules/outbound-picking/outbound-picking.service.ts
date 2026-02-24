@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OutboundStatus, PickSource, Prisma } from '@prisma/client';
+import { getModuleLogger } from '../../common/logging/module-logger';
 
 type Tx = Prisma.TransactionClient;
 
@@ -12,6 +13,8 @@ type ReserveOptions = {
   allowStatuses?: OutboundStatus[];
   forceReReserve?: boolean; // 주문 전체 재예약(가급적 사용 X)
 };
+
+const logger = getModuleLogger('OutboundPickingService');
 
 // NOTE(version policy)
 // - OutboundOrder.version / OutboundLine.version 증가는 “사용자 편집(OrdersService)”에서만 수행한다.
@@ -112,6 +115,14 @@ export class OutboundPickingService {
         },
       });
 
+      logger.info({
+        event: 'outbound.picking.submit.success',
+        companyId,
+        orderId,
+        userId,
+        allocationCount: allocations.length,
+      });
+
       return { message: 'Picked submitted' };
     });
   }
@@ -207,6 +218,15 @@ export class OutboundPickingService {
 
       // ✅ 해당 라인도 변경 이력(버전) 반영
       // (Removed version increment update as per instructions)
+
+      logger.info({
+        event: 'outbound.picking.manual.success',
+        companyId,
+        orderId,
+        userId,
+        outboundLineId: dto.outboundLineId,
+        qty: dto.qty,
+      });
 
       return { message: 'Manual pick reserved' };
     });

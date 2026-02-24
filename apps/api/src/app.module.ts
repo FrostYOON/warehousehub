@@ -13,6 +13,7 @@ import { OutboundOrdersModule } from './modules/outbound-orders/outbound-orders.
 import { OutboundShippingModule } from './modules/outbound-shipping/outbound-shipping.module';
 import { OutboundPickingModule } from './modules/outbound-picking/outbound-picking.module';
 import { ReturnsModule } from './modules/returns/returns.module';
+import { LoggingModule } from './common/logging/logging.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ReturnsModule } from './modules/returns/returns.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    LoggingModule,
     PrismaModule,
     AuthModule,
     UsersModule,

@@ -6,6 +6,9 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { getModuleLogger } from '../../common/logging/module-logger';
+
+const logger = getModuleLogger('CustomersService');
 
 @Injectable()
 export class CustomersService {
@@ -91,7 +94,7 @@ export class CustomersService {
     });
     if (!found) throw new NotFoundException('Customer not found');
 
-    return this.prisma.customer.update({
+    const updated = await this.prisma.customer.update({
       where: { id },
       data: {
         customerName: this.normalizeRequiredStringForUpdate(
@@ -110,6 +113,12 @@ export class CustomersService {
         lng: dto.lng,
       },
     });
+    logger.info({
+      event: 'customers.update.success',
+      companyId,
+      customerId: id,
+    });
+    return updated;
   }
 
   async deactivate(companyId: string, id: string) {
@@ -118,9 +127,15 @@ export class CustomersService {
     });
     if (!found) throw new NotFoundException('Customer not found');
 
-    return this.prisma.customer.update({
+    const deactivated = await this.prisma.customer.update({
       where: { id },
       data: { isActive: false },
     });
+    logger.warn({
+      event: 'customers.deactivate.success',
+      companyId,
+      customerId: id,
+    });
+    return deactivated;
   }
 }

@@ -9,11 +9,14 @@ import {
   ReturnStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { getModuleLogger } from '../../common/logging/module-logger';
 
 import { CreateReturnReceiptDto } from './dto/create-return.dto';
 import { UpdateReturnReceiptDto } from './dto/update-return.dto';
 import { DecideReturnReceiptDto } from './dto/decide-return.dto';
 import { ProcessReturnReceiptDto } from './dto/process-return.dto';
+
+const logger = getModuleLogger('ReturnsService');
 
 @Injectable()
 export class ReturnsService {
@@ -62,6 +65,14 @@ export class ReturnsService {
         },
       },
       include: { lines: true, customer: true },
+    });
+
+    logger.info({
+      event: 'returns.create.success',
+      companyId,
+      receiptId: receipt.id,
+      userId,
+      lineCount: dto.lines.length,
     });
 
     return receipt;
@@ -259,6 +270,12 @@ export class ReturnsService {
         },
       });
 
+      logger.warn({
+        event: 'returns.cancel.success',
+        companyId,
+        receiptId: id,
+      });
+
       return { message: 'Cancelled' };
     });
   }
@@ -308,6 +325,14 @@ export class ReturnsService {
           decidedAt: new Date(),
           version: { increment: 1 },
         },
+      });
+
+      logger.info({
+        event: 'returns.decide.success',
+        companyId,
+        receiptId: id,
+        userId,
+        decisionCount: dto.lines.length,
       });
 
       return tx.returnReceipt.findFirst({
@@ -510,6 +535,15 @@ export class ReturnsService {
           },
         });
       }
+
+      logger.info({
+        event: 'returns.process.success',
+        companyId,
+        receiptId: id,
+        userId,
+        processedCount: targetLines.length,
+        remainingUnprocessed: remaining,
+      });
 
       return tx.returnReceipt.findFirst({
         where: { id: receipt.id, companyId },

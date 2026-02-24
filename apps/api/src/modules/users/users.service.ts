@@ -6,6 +6,9 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { Role, StorageType } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
+import { getModuleLogger } from '../../common/logging/module-logger';
+
+const logger = getModuleLogger('UsersService');
 
 @Injectable()
 export class UsersService {
@@ -68,6 +71,12 @@ export class UsersService {
       },
     });
 
+    logger.info({
+      event: 'users.company_admin_created',
+      companyId: company.id,
+      adminUserId: user.id,
+    });
+
     return { company, user };
   }
 
@@ -95,7 +104,7 @@ export class UsersService {
     role: Role;
   }) {
     try {
-      return this.prisma.user.create({
+      const created = await this.prisma.user.create({
         data: {
           companyId: params.companyId,
           email: params.email,
@@ -114,6 +123,13 @@ export class UsersService {
           updatedAt: true,
         },
       });
+      logger.info({
+        event: 'users.create.success',
+        companyId: params.companyId,
+        userId: created.id,
+        role: created.role,
+      });
+      return created;
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
@@ -131,7 +147,7 @@ export class UsersService {
     });
 
     if (user.count === 0) throw new NotFoundException('User not found');
-    return this.prisma.user.findUnique({
+    const updated = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -143,6 +159,13 @@ export class UsersService {
         updatedAt: true,
       },
     });
+    logger.info({
+      event: 'users.role_updated',
+      companyId,
+      userId,
+      role,
+    });
+    return updated;
   }
 
   async deactivate(companyId: string, userId: string) {
@@ -153,7 +176,7 @@ export class UsersService {
 
     if (user.count === 0) throw new NotFoundException('User not found');
 
-    return this.prisma.user.findUnique({
+    const deactivated = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -165,5 +188,11 @@ export class UsersService {
         updatedAt: true,
       },
     });
+    logger.warn({
+      event: 'users.deactivated',
+      companyId,
+      userId,
+    });
+    return deactivated;
   }
 }

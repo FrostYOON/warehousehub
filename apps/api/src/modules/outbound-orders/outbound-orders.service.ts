@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateOutboundOrderDto } from './dto/create-outbound-order.dto';
 import { OutboundPickingService } from '../outbound-picking/outbound-picking.service';
 import { OutboundStatus, Prisma } from '@prisma/client';
+import { getModuleLogger } from '../../common/logging/module-logger';
 
 type Tx = Prisma.TransactionClient;
 
@@ -27,6 +28,8 @@ const EDITABLE_UNTIL_READY: OutboundStatus[] = [
   OutboundStatus.PICKED,
   OutboundStatus.READY_TO_SHIP,
 ];
+
+const logger = getModuleLogger('OutboundOrdersService');
 
 @Injectable()
 export class OutboundOrdersService {
@@ -77,6 +80,14 @@ export class OutboundOrdersService {
       await this.picking.reserveForOrderTx(tx, companyId, userId, order.id, {
         allowStatuses: [OutboundStatus.DRAFT, OutboundStatus.PICKING],
         forceReReserve: false,
+      });
+
+      logger.info({
+        event: 'outbound.order.create.success',
+        companyId,
+        orderId: order.id,
+        userId,
+        lineCount: dto.lines.length,
       });
 
       return tx.outboundOrder.findFirst({
@@ -356,6 +367,14 @@ export class OutboundOrdersService {
 
           memo: reason ? `[CANCELLED] ${reason}` : '[CANCELLED]',
         },
+      });
+
+      logger.warn({
+        event: 'outbound.order.cancelled',
+        companyId,
+        orderId,
+        userId,
+        reason: reason ?? null,
       });
 
       return { message: 'Order cancelled', orderId };

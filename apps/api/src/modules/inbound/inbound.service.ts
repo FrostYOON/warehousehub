@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { StorageType } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
+import { getModuleLogger } from '../../common/logging/module-logger';
 
 type ParsedRow = {
   itemCode: string;
@@ -25,6 +26,8 @@ const REQUIRED_COLUMNS = [
   'Quantity',
   'ExpiryDate',
 ] as const;
+
+const logger = getModuleLogger('InboundService');
 
 function toCellString(raw: unknown): string {
   if (raw === null || raw === undefined) return '';
@@ -224,6 +227,12 @@ export class InboundService {
     actorUserId: string;
   }) {
     const { companyId, uploadId, actorUserId } = params;
+    logger.info({
+      event: 'inbound.confirm.start',
+      companyId,
+      uploadId,
+      actorUserId,
+    });
 
     const upload = await this.prisma.inboundUpload.findFirst({
       where: { id: uploadId, companyId },
@@ -365,6 +374,13 @@ export class InboundService {
         },
       });
 
+      logger.info({
+        event: 'inbound.confirm.success',
+        companyId,
+        uploadId,
+        actorUserId,
+        rowCount: upload.rows.length,
+      });
       return { ok: true };
     });
   }

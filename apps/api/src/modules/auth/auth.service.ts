@@ -11,6 +11,7 @@ import {
   generateRefreshToken,
   hashToken,
 } from '../../common/utils/token.util';
+import { getModuleLogger } from '../../common/logging/module-logger';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { RequestMeta } from './http/decorators/req-meta.decorator';
@@ -20,6 +21,8 @@ type AccessTokenPayload = {
   companyId: string;
   role: string;
 };
+
+const logger = getModuleLogger('AuthService');
 
 @Injectable()
 export class AuthService {
@@ -50,6 +53,13 @@ export class AuthService {
       deviceName: dto.deviceName ?? meta.deviceName,
       userAgent: meta.userAgent,
       ip: meta.ip,
+    });
+
+    logger.info({
+      event: 'auth.register.success',
+      companyId: company.id,
+      userId: user.id,
+      deviceId: dto.deviceId ?? meta.deviceId,
     });
 
     return {
@@ -89,6 +99,13 @@ export class AuthService {
       ip: meta.ip,
     });
 
+    logger.info({
+      event: 'auth.login.success',
+      companyId: company.id,
+      userId: user.id,
+      deviceId: dto.deviceId ?? meta.deviceId,
+    });
+
     return {
       accessToken,
       refreshToken,
@@ -120,6 +137,10 @@ export class AuthService {
         where: { userId: stored.userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+      logger.warn({
+        event: 'auth.refresh.reuse_detected',
+        userId: stored.userId,
+      });
       throw new UnauthorizedException('Refresh token reuse detected');
     }
 
@@ -145,6 +166,13 @@ export class AuthService {
       ip: meta.ip ?? stored.ip ?? undefined,
     });
 
+    logger.info({
+      event: 'auth.refresh.success',
+      userId: stored.userId,
+      companyId: stored.user.companyId,
+      deviceId: meta.deviceId ?? stored.deviceId ?? undefined,
+    });
+
     return { accessToken, refreshToken: newRefreshToken };
   }
 
@@ -155,6 +183,8 @@ export class AuthService {
       where: { tokenHash, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+
+    logger.info({ event: 'auth.logout.success' });
 
     return { ok: true };
   }
@@ -183,6 +213,7 @@ export class AuthService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    logger.warn({ event: 'auth.withdraw.success', companyId, userId });
     return { ok: true };
   }
 

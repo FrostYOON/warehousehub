@@ -5,6 +5,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryTxType, OutboundStatus } from '@prisma/client';
+import { getModuleLogger } from '../../common/logging/module-logger';
+
+const logger = getModuleLogger('OutboundShippingService');
 
 @Injectable()
 export class OutboundShippingService {
@@ -31,6 +34,13 @@ export class OutboundShippingService {
       },
     });
 
+    logger.info({
+      event: 'outbound.shipping.verify.success',
+      companyId,
+      orderId,
+      userId,
+    });
+
     return { message: 'Verified' };
   }
 
@@ -55,6 +65,13 @@ export class OutboundShippingService {
         shippingStartedByUserId: userId,
         shippingStartedAt: new Date(),
       },
+    });
+
+    logger.info({
+      event: 'outbound.shipping.start.success',
+      companyId,
+      orderId,
+      userId,
     });
 
     return { message: 'Shipping started' };
@@ -159,6 +176,14 @@ export class OutboundShippingService {
           refType: 'OUTBOUND_ORDER',
           refId: orderId,
         },
+      });
+
+      logger.info({
+        event: 'outbound.shipping.complete.success',
+        companyId,
+        orderId,
+        userId,
+        allocationCount: allocations.length,
       });
 
       return { message: 'Delivered (stock committed)' };
