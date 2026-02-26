@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
+import * as XLSX from 'xlsx';
 import { InboundService } from './inbound.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -34,6 +35,72 @@ describe('InboundService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('createUpload validation', () => {
+    it('accepts headers with extra spaces by normalizing column names', async () => {
+      prismaMock.inboundUpload.create.mockResolvedValueOnce({ id: 'upload-1' });
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet([
+        {
+          ' ItemCode ': 'A001',
+          ItemName: 'Apple',
+          StorageType: 'DRY',
+          Quantity: 10,
+          ExpiryDate: '-',
+        },
+      ]);
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      const result = await service.createUpload({
+        companyId: 'company-1',
+        userId: 'user-1',
+        fileName: 'inbound.xlsx',
+        buffer,
+      });
+
+      expect(result).toEqual({ id: 'upload-1', invalidCount: 0 });
+    });
+
+    it('accepts decimal quantity rows', async () => {
+      prismaMock.inboundUpload.create.mockResolvedValueOnce({ id: 'upload-2' });
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet([
+        {
+          ItemCode: 'A001',
+          ItemName: 'Apple',
+          StorageType: 'DRY',
+          Quantity: 10.5,
+          ExpiryDate: '-',
+        },
+      ]);
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+      const result = await service.createUpload({
+        companyId: 'company-1',
+        userId: 'user-1',
+        fileName: 'inbound.xlsx',
+        buffer,
+      });
+
+      expect(result).toEqual({ id: 'upload-2', invalidCount: 0 });
+      expect(prismaMock.inboundUpload.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            rows: expect.objectContaining({
+              create: expect.arrayContaining([
+                expect.objectContaining({
+                  quantity: 10.5,
+                  isValid: true,
+                }),
+              ]),
+            }),
+          }),
+        }),
+      );
+    });
   });
 
   describe('confirmUpload', () => {

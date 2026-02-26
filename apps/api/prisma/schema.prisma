@@ -280,8 +280,8 @@ model Stock {
   lotId String
   lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
 
-  onHand   Int @default(0)
-  reserved Int @default(0)
+  onHand   Decimal @default(0) @db.Decimal(18, 3)
+  reserved Decimal @default(0) @db.Decimal(18, 3)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -332,7 +332,7 @@ model InventoryTxLine {
   lotId String
   lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
 
-  qtyDelta Int
+  qtyDelta Decimal @db.Decimal(18, 3)
 
   createdAt DateTime @default(now())
 
@@ -368,7 +368,7 @@ model InboundUploadRow {
   itemCode    String
   itemName    String
   storageType StorageType
-  quantity    Int
+  quantity    Decimal @db.Decimal(18, 3)
   expiryDate  DateTime?
 
   isValid      Boolean @default(true)
@@ -445,10 +445,10 @@ model OutboundLine {
   itemId String
   item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict)
 
-  requestedQty Int
-  pickedQty    Int @default(0)
-  shippedQty   Int @default(0)
-  deliveredQty Int @default(0)
+  requestedQty Decimal @db.Decimal(18, 3)
+  pickedQty    Decimal @default(0) @db.Decimal(18, 3)
+  shippedQty   Decimal @default(0) @db.Decimal(18, 3)
+  deliveredQty Decimal @default(0) @db.Decimal(18, 3)
 
   status OutboundLineStatus @default(ACTIVE)
 
@@ -479,9 +479,9 @@ model PickAllocation {
   lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Restrict)
 
   /// 예약된 수량(시스템이 FEFO로 잡아둔 수량 또는 수동 지정 수량)
-  qty       Int
+  qty       Decimal @db.Decimal(18, 3)
   /// 실제 픽 체크 수량(부분 픽 허용: 0~qty)
-  pickedQty Int @default(0)
+  pickedQty Decimal @default(0) @db.Decimal(18, 3)
 
   /// 🔹 픽 방식 (자동 / 수동)
   source       PickSource @default(AUTO_FEFO)
@@ -552,7 +552,7 @@ model ReturnReceiptLine {
 
   storageType StorageType
   expiryDate  DateTime?
-  qty         Int
+  qty         Decimal @db.Decimal(18, 3)
 
   // 결정(재입고/폐기)
   decision        ReturnLineDecision?

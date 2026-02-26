@@ -47,6 +47,20 @@ function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : 'Invalid row';
 }
 
+function normalizeHeaderName(name: string): string {
+  return name.trim();
+}
+
+function normalizeRowKeys(
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    normalized[normalizeHeaderName(key)] = value;
+  }
+  return normalized;
+}
+
 @Injectable()
 export class InboundService {
   constructor(private readonly prisma: PrismaService) {}
@@ -111,14 +125,17 @@ export class InboundService {
 
   private parseQuantity(raw: unknown): number {
     const n = Number(toCellString(raw).trim());
-    if (!Number.isFinite(n) || n <= 0)
+    if (!Number.isFinite(n) || n <= 0) {
       throw new Error(`Invalid quantity: ${toCellString(raw)}`);
-    return Math.floor(n);
+    }
+    return n;
   }
 
   private ensureRequiredColumns(headers: string[]) {
+    const normalizedHeaders = headers.map(normalizeHeaderName);
     for (const col of REQUIRED_COLUMNS) {
-      if (!headers.includes(col)) throw new Error(`Missing column: ${col}`);
+      if (!normalizedHeaders.includes(col))
+        throw new Error(`Missing column: ${col}`);
     }
   }
 
@@ -136,7 +153,8 @@ export class InboundService {
     const headers = json.length > 0 ? Object.keys(json[0]) : [];
     this.ensureRequiredColumns(headers);
 
-    return json.map((r, idx) => {
+    return json.map((rawRow, idx) => {
+      const r = normalizeRowKeys(rawRow);
       let isValid = true;
       let errorMessage: string | null = null;
 

@@ -115,10 +115,13 @@ export class OutboundOrdersController {
   ) {
     if (
       dto.requestedQty === undefined ||
-      !Number.isInteger(dto.requestedQty) ||
+      !Number.isFinite(dto.requestedQty) ||
+      !Number.isInteger(dto.requestedQty * 1000) ||
       dto.requestedQty < 1
     ) {
-      throw new BadRequestException('requestedQty must be an integer >= 1');
+      throw new BadRequestException(
+        'requestedQty must be >= 1 with up to 3 decimal places',
+      );
     }
     return this.orders.updateLine(
       req.user.companyId,
