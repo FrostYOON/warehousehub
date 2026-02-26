@@ -2,7 +2,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
   Post,
   UseGuards,
   UseInterceptors,
@@ -25,7 +27,13 @@ import { RefreshCookieGuard } from './http/guards/refresh-cookie.guard';
 import { RefreshToken } from './http/decorators/refresh-token.decorator';
 import { CurrentUser } from './http/decorators/current-user.decorator';
 import { RequestMeta } from './http/decorators/req-meta.decorator';
-import { LoginResponseDto, MeResponseDto } from './dto/auth.response.dto';
+import {
+  DeviceSessionsResponseDto,
+  LoginResponseDto,
+  LogoutOthersResponseDto,
+  MeResponseDto,
+  OkResponseDto,
+} from './dto/auth.response.dto';
 import type { CurrentUserPayload } from './http/decorators/current-user.decorator';
 import type { RequestMeta as RequestMetaType } from './http/decorators/req-meta.decorator';
 
@@ -52,7 +60,7 @@ export class AuthController {
   @Post('refresh')
   @UseGuards(RefreshCookieGuard)
   @SetAuthCookies()
-  @ApiOkResponse({ schema: { example: { ok: true } } })
+  @ApiOkResponse({ type: OkResponseDto })
   refresh(
     @RefreshToken() refreshToken: string,
     @RequestMeta() meta: RequestMetaType,
@@ -62,7 +70,7 @@ export class AuthController {
 
   @Post('logout')
   @ClearAuthCookies()
-  @ApiOkResponse({ schema: { example: { ok: true } } })
+  @ApiOkResponse({ type: OkResponseDto })
   logout(@RefreshToken() refreshToken?: string) {
     return this.auth.logout(refreshToken ?? '');
   }
@@ -76,9 +84,42 @@ export class AuthController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Get('devices')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ type: DeviceSessionsResponseDto })
+  devices(
+    @CurrentUser() user: CurrentUserPayload,
+    @RefreshToken() refreshToken?: string,
+  ) {
+    return this.auth.listDeviceSessions(user.userId, refreshToken);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Delete('devices/:sessionId')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ type: OkResponseDto })
+  revokeDeviceSession(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.auth.revokeDeviceSession(user.userId, sessionId);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('devices/logout-others')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ type: LogoutOthersResponseDto })
+  logoutOtherDevices(
+    @CurrentUser() user: CurrentUserPayload,
+    @RefreshToken() refreshToken?: string,
+  ) {
+    return this.auth.logoutOtherDevices(user.userId, refreshToken);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Post('withdraw')
   @ApiBearerAuth('access-token')
-  @ApiOkResponse({ schema: { example: { ok: true } } })
+  @ApiOkResponse({ type: OkResponseDto })
   withdraw(@CurrentUser() user: CurrentUserPayload) {
     return this.auth.withdraw(user.companyId, user.userId);
   }
@@ -87,7 +128,7 @@ export class AuthController {
   @Roles(Role.ADMIN)
   @Get('admin-only')
   @ApiBearerAuth('access-token')
-  @ApiOkResponse({ schema: { example: { ok: true } } })
+  @ApiOkResponse({ type: OkResponseDto })
   adminOnly() {
     return { ok: true };
   }

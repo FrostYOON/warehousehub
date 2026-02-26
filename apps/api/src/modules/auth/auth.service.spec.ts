@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { UnauthorizedException } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
@@ -16,6 +16,7 @@ describe('AuthService', () => {
   const prismaMock = {
     refreshToken: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       updateMany: jest.fn(),
       update: jest.fn(),
       create: jest.fn(),
@@ -37,6 +38,8 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    prismaMock.refreshToken.findMany.mockResolvedValue([]);
+    prismaMock.refreshToken.updateMany.mockResolvedValue({ count: 0 });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -264,6 +267,123 @@ describe('AuthService', () => {
       expect(typeof updateManyCall.where.tokenHash).toBe('string');
       expect(updateManyCall.where.revokedAt).toBeNull();
       expect(updateManyCall.data.revokedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('listDeviceSessions', () => {
+    it('returns active device sessions with current session marker', async () => {
+      const now = new Date();
+      prismaMock.refreshToken.findMany.mockResolvedValueOnce([
+        {
+          id: 'session-1',
+          tokenHash:
+            '8f7f7eeb8f7ca0841f05dfc9f0f338910f85e9f3f74f8c012f26e176f2eb8f10',
+          deviceId: 'device-1',
+          deviceName: 'Web (MacIntel)',
+          userAgent: 'Mozilla',
+          ip: '127.0.0.1',
+          createdAt: now,
+          expiresAt: now,
+        },
+      ]);
+
+      const result = await service.listDeviceSessions('user-1', 'refresh-token');
+
+      const calls = prismaMock.refreshToken.findMany.mock.calls as unknown as [
+        [
+          {
+            where: {
+              userId: string;
+              revokedAt: null;
+              expiresAt: { gt: Date };
+            };
+          },
+        ]?,
+      ];
+      const call = calls[0]?.[0] as {
+        where: {
+          userId: string;
+          revokedAt: null;
+          expiresAt: { gt: Date };
+        };
+      };
+      expect(call.where.userId).toBe('user-1');
+      expect(call.where.revokedAt).toBeNull();
+      expect(call.where.expiresAt.gt).toBeInstanceOf(Date);
+      expect(result.maxActiveDevices).toBeGreaterThan(0);
+      expect(result.devices).toHaveLength(1);
+      expect(result.devices[0]?.id).toBe('session-1');
+      expect(result.devices[0]?.isCurrent).toBe(false);
+    });
+  });
+
+  describe('revokeDeviceSession', () => {
+    it('throws not found when session does not belong to user', async () => {
+      prismaMock.refreshToken.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.revokeDeviceSession('user-1', 'session-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('revokes matched active session', async () => {
+      prismaMock.refreshToken.findFirst.mockResolvedValueOnce({ id: 'session-1' });
+      prismaMock.refreshToken.update.mockResolvedValueOnce({});
+
+      const result = await service.revokeDeviceSession('user-1', 'session-1');
+
+      const updateCalls = prismaMock.refreshToken.update.mock
+        .calls as unknown as [
+        [{ where: { id: string }; data: { revokedAt: Date } }]?,
+      ];
+      const updateCall = updateCalls[0]?.[0] as {
+        where: { id: string };
+        data: { revokedAt: Date };
+      };
+      expect(updateCall.where.id).toBe('session-1');
+      expect(updateCall.data.revokedAt).toBeInstanceOf(Date);
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  describe('logoutOtherDevices', () => {
+    it('throws when refresh token is missing', async () => {
+      await expect(service.logoutOtherDevices('user-1')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('revokes all active sessions except current one', async () => {
+      prismaMock.refreshToken.updateMany.mockResolvedValueOnce({ count: 2 });
+
+      const result = await service.logoutOtherDevices('user-1', 'refresh-token');
+
+      const updateManyCalls = prismaMock.refreshToken.updateMany.mock
+        .calls as unknown as [
+        [
+          {
+            where: {
+              userId: string;
+              revokedAt: null;
+              tokenHash: { not: string };
+            };
+            data: { revokedAt: Date };
+          },
+        ]?,
+      ];
+      const updateManyCall = updateManyCalls[0]?.[0] as {
+        where: {
+          userId: string;
+          revokedAt: null;
+          tokenHash: { not: string };
+        };
+        data: { revokedAt: Date };
+      };
+      expect(updateManyCall.where.userId).toBe('user-1');
+      expect(updateManyCall.where.revokedAt).toBeNull();
+      expect(typeof updateManyCall.where.tokenHash.not).toBe('string');
+      expect(updateManyCall.data.revokedAt).toBeInstanceOf(Date);
+      expect(result).toEqual({ ok: true, revokedCount: 2 });
     });
   });
 });
