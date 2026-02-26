@@ -23,6 +23,18 @@ type AccessTokenPayload = {
 };
 
 const logger = getModuleLogger('AuthService');
+const DEFAULT_MAX_ACTIVE_DEVICES = 3;
+
+function getMaxActiveDevices(): number {
+  const raw = process.env.AUTH_MAX_ACTIVE_DEVICES;
+  if (!raw) return DEFAULT_MAX_ACTIVE_DEVICES;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_MAX_ACTIVE_DEVICES;
+  }
+  return parsed;
+}
 
 @Injectable()
 export class AuthService {
@@ -229,6 +241,48 @@ export class AuthService {
     userId: string,
     meta: RequestMeta = {},
   ): Promise<string> {
+    const now = new Date();
+    const deviceId = meta.deviceId?.trim() || undefined;
+    const deviceName = meta.deviceName?.trim() || undefined;
+
+    if (deviceId) {
+      const activeTokens = await this.prisma.refreshToken.findMany({
+        where: {
+          userId,
+          revokedAt: null,
+          expiresAt: { gt: now },
+          deviceId: { not: null },
+        },
+        select: { id: true, deviceId: true },
+      });
+
+      const isExistingDevice = activeTokens.some((t) => t.deviceId === deviceId);
+      const activeDeviceCount = new Set(
+        activeTokens
+          .map((t) => t.deviceId)
+          .filter((id): id is string => Boolean(id)),
+      ).size;
+
+      const maxActiveDevices = getMaxActiveDevices();
+      if (!isExistingDevice && activeDeviceCount >= maxActiveDevices) {
+        throw new UnauthorizedException(
+          `Device limit exceeded (max ${maxActiveDevices})`,
+        );
+      }
+
+      // Keep only one active refresh token per device.
+      await this.prisma.refreshToken.updateMany({
+        where: {
+          userId,
+          deviceId,
+          revokedAt: null,
+        },
+        data: { revokedAt: now },
+      });
+    } else {
+      logger.warn({ event: 'auth.device_id.missing', userId });
+    }
+
     const refreshToken = generateRefreshToken();
     const tokenHash = hashToken(refreshToken);
 
@@ -237,8 +291,8 @@ export class AuthService {
         userId,
         tokenHash,
         expiresAt: addDays(30),
-        deviceId: meta.deviceId,
-        deviceName: meta.deviceName,
+        deviceId,
+        deviceName,
         userAgent: meta.userAgent,
         ip: meta.ip,
       },
