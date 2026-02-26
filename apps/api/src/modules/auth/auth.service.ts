@@ -273,17 +273,24 @@ export class AuthService {
     });
 
     return {
-      devices: tokens.map((token) => ({
-        id: token.id,
-        deviceId: token.deviceId,
-        deviceName: token.deviceName,
-        userAgent: token.userAgent,
-        ip: token.ip,
-        createdAt: token.createdAt,
-        expiresAt: token.expiresAt,
-        isCurrent:
-          currentTokenHash != null && token.tokenHash === currentTokenHash,
-      })),
+      devices: tokens
+        .map((token) => ({
+          id: token.id,
+          deviceId: token.deviceId,
+          deviceName: token.deviceName,
+          userAgent: token.userAgent,
+          ip: token.ip,
+          createdAt: token.createdAt,
+          expiresAt: token.expiresAt,
+          isCurrent:
+            currentTokenHash != null && token.tokenHash === currentTokenHash,
+        }))
+        .sort((a, b) => {
+          if (a.isCurrent !== b.isCurrent) {
+            return a.isCurrent ? -1 : 1;
+          }
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        }),
       maxActiveDevices: getMaxActiveDevices(),
     };
   }

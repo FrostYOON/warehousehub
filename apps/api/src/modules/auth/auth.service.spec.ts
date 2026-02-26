@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { comparePassword } from '../../common/utils/password.util';
+import { hashToken } from '../../common/utils/token.util';
 
 jest.mock('../../common/utils/password.util', () => ({
   hashPassword: jest.fn(),
@@ -314,6 +315,57 @@ describe('AuthService', () => {
       expect(result.devices).toHaveLength(1);
       expect(result.devices[0]?.id).toBe('session-1');
       expect(result.devices[0]?.isCurrent).toBe(false);
+    });
+
+    it('sorts current device first, then recent sessions', async () => {
+      const currentToken = 'current-refresh-token';
+      const now = new Date('2026-02-01T10:00:00.000Z');
+      const older = new Date('2026-01-01T10:00:00.000Z');
+      const newest = new Date('2026-03-01T10:00:00.000Z');
+
+      prismaMock.refreshToken.findMany.mockResolvedValueOnce([
+        {
+          id: 'session-older',
+          tokenHash: 'hash-older',
+          deviceId: 'device-older',
+          deviceName: 'Older Device',
+          userAgent: 'UA-older',
+          ip: '10.0.0.1',
+          createdAt: older,
+          expiresAt: new Date(older.getTime() + 60_000),
+        },
+        {
+          id: 'session-current',
+          tokenHash: hashToken(currentToken),
+          deviceId: 'device-current',
+          deviceName: 'Current Device',
+          userAgent: 'UA-current',
+          ip: '10.0.0.2',
+          createdAt: now,
+          expiresAt: new Date(now.getTime() + 60_000),
+        },
+        {
+          id: 'session-newest',
+          tokenHash: 'hash-newest',
+          deviceId: 'device-newest',
+          deviceName: 'Newest Device',
+          userAgent: 'UA-newest',
+          ip: '10.0.0.3',
+          createdAt: newest,
+          expiresAt: new Date(newest.getTime() + 60_000),
+        },
+      ]);
+
+      const result = await service.listDeviceSessions('user-1', currentToken);
+
+      expect(result.devices.map((d) => d.id)).toEqual([
+        'session-current',
+        'session-newest',
+        'session-older',
+      ]);
+      expect(result.devices[0]?.isCurrent).toBe(true);
+      expect(result.devices[1]?.isCurrent).toBe(false);
+      expect(result.devices[2]?.isCurrent).toBe(false);
     });
   });
 

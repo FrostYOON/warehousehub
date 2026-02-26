@@ -10,6 +10,7 @@ export function AuthHome() {
     devices,
     maxActiveDevices,
     error,
+    successMessage,
     loggingOut,
     loadingDevices,
     deviceActionId,
@@ -36,6 +37,11 @@ export function AuthHome() {
       {error && (
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+        </p>
+      )}
+      {successMessage && (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          {successMessage}
         </p>
       )}
       <SummaryGrid items={summaryItems} />

@@ -22,6 +22,7 @@ export function useAuthSession() {
   const [devices, setDevices] = useState<DeviceSession[]>([]);
   const [maxActiveDevices, setMaxActiveDevices] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
@@ -68,9 +69,11 @@ export function useAuthSession() {
   async function revokeDevice(sessionId: string) {
     setDeviceActionId(sessionId);
     setError(null);
+    setSuccessMessage(null);
     try {
       await revokeDeviceSession(sessionId);
       await refreshDevices();
+      setSuccessMessage('디바이스를 로그아웃했습니다.');
     } catch {
       setError('디바이스 로그아웃에 실패했습니다.');
     } finally {
@@ -81,9 +84,17 @@ export function useAuthSession() {
   async function signOutOthers() {
     setLoggingOutOthers(true);
     setError(null);
+    setSuccessMessage(null);
     try {
-      await logoutOtherDevices();
+      const result = await logoutOtherDevices();
       await refreshDevices();
+      if (result.revokedCount > 0) {
+        setSuccessMessage(
+          `다른 디바이스 ${result.revokedCount}대를 로그아웃했습니다.`,
+        );
+      } else {
+        setSuccessMessage('로그아웃할 다른 디바이스가 없습니다.');
+      }
     } catch {
       setError('다른 디바이스 로그아웃에 실패했습니다.');
     } finally {
@@ -106,6 +117,7 @@ export function useAuthSession() {
     devices,
     maxActiveDevices,
     error,
+    successMessage,
     loggingOut,
     loadingDevices,
     deviceActionId,
