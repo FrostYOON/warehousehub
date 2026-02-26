@@ -12,12 +12,15 @@ export class StocksService {
     itemCode?: string;
   }) {
     const { companyId, storageType, itemCode } = params;
+    const normalizedItemCode = itemCode?.trim() || undefined;
 
     return this.prisma.stock.findMany({
       where: {
         companyId,
         warehouse: storageType ? { type: storageType } : undefined,
-        lot: itemCode ? { item: { itemCode } } : undefined,
+        lot: normalizedItemCode
+          ? { item: { itemCode: normalizedItemCode } }
+          : undefined,
       },
       orderBy: [
         {

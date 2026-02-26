@@ -240,15 +240,28 @@ export class InboundService {
     });
 
     if (!upload) throw new NotFoundException('Upload not found');
-    if (upload.status !== 'UPLOADED')
-      throw new BadRequestException('Upload already processed');
-
     const invalidRows = upload.rows.filter((r) => !r.isValid);
     if (invalidRows.length > 0)
       throw new BadRequestException('Cannot confirm: invalid rows exist');
 
     // 트랜잭션 시작
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // 동시 confirm 경쟁 상황에서 한 요청만 선점하도록 보장
+      const claimed = await tx.inboundUpload.updateMany({
+        where: {
+          id: uploadId,
+          companyId,
+          status: 'UPLOADED',
+        },
+        data: {
+          status: 'CONFIRMED',
+          confirmedAt: new Date(),
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new BadRequestException('Upload already processed');
+      }
+
       // InventoryTx 생성
       const inventoryTx = await tx.inventoryTx.create({
         data: {
@@ -331,8 +344,11 @@ export class InboundService {
           select: { id: true },
         });
 
-        if (!warehouse)
-          throw new Error(`Warehouse not found: ${row.storageType}`);
+        if (!warehouse) {
+          throw new BadRequestException(
+            `Warehouse not found: ${row.storageType}`,
+          );
+        }
 
         // 4️⃣ Stock upsert (+onHand)
         await tx.stock.upsert({
@@ -364,15 +380,6 @@ export class InboundService {
           },
         });
       }
-
-      // 6️⃣ Upload 상태 변경
-      await tx.inboundUpload.update({
-        where: { id: uploadId },
-        data: {
-          status: 'CONFIRMED',
-          confirmedAt: new Date(),
-        },
-      });
 
       logger.info({
         event: 'inbound.confirm.success',
