@@ -4,6 +4,15 @@ export type LoginRequest = {
   password: string;
 };
 
+export type LoginCompany = {
+  id: string;
+  name: string;
+};
+
+export type LoginCompaniesResponse = {
+  companies: LoginCompany[];
+};
+
 export type MeResponse = {
   id: string;
   email: string;

@@ -59,6 +59,18 @@ export class AuthService {
     private readonly jwt: JwtService,
   ) {}
 
+  async listLoginCompanies() {
+    const companies = await this.prisma.company.findMany({
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    return { companies };
+  }
+
   async register(dto: RegisterDto, meta: RequestMeta) {
     const passwordHash = await hashPassword(dto.password);
 

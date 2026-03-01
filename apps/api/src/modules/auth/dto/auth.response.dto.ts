@@ -68,3 +68,16 @@ export class LogoutOthersResponseDto extends OkResponseDto {
   @ApiProperty({ example: 2 })
   revokedCount!: number;
 }
+
+export class LoginCompanyDto {
+  @ApiProperty({ example: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ example: 'WarehouseHub' })
+  name!: string;
+}
+
+export class LoginCompaniesResponseDto {
+  @ApiProperty({ type: LoginCompanyDto, isArray: true })
+  companies!: LoginCompanyDto[];
+}

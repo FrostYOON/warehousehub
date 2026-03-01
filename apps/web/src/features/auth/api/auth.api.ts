@@ -1,6 +1,7 @@
 import { httpClient } from '@/shared/api/http-client';
 import type {
   DeviceSessionsResponse,
+  LoginCompaniesResponse,
   LoginRequest,
   LogoutOthersResponse,
   MeResponse,
@@ -8,6 +9,11 @@ import type {
 
 export async function login(payload: LoginRequest): Promise<void> {
   await httpClient.post('/auth/login', payload);
+}
+
+export async function getLoginCompanies(): Promise<LoginCompaniesResponse> {
+  const res = await httpClient.get<LoginCompaniesResponse>('/auth/companies');
+  return res.data;
 }
 
 export async function getMe(): Promise<MeResponse> {

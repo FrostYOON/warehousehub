@@ -29,6 +29,7 @@ import { CurrentUser } from './http/decorators/current-user.decorator';
 import { RequestMeta } from './http/decorators/req-meta.decorator';
 import {
   DeviceSessionsResponseDto,
+  LoginCompaniesResponseDto,
   LoginResponseDto,
   LogoutOthersResponseDto,
   MeResponseDto,
@@ -42,6 +43,12 @@ import type { RequestMeta as RequestMetaType } from './http/decorators/req-meta.
 @UseInterceptors(AuthCookiesInterceptor) // Auth 컨트롤러 전체에 적용
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
+
+  @Get('companies')
+  @ApiOkResponse({ type: LoginCompaniesResponseDto })
+  companies() {
+    return this.auth.listLoginCompanies();
+  }
 
   @Post('register')
   @SetAuthCookies()

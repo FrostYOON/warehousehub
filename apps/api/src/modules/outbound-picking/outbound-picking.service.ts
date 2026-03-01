@@ -288,7 +288,8 @@ export class OutboundPickingService {
 
     for (const line of order.lines) {
       if (line.status === 'CANCELLED') continue;
-      if (line.requestedQty <= 0) continue;
+      const requestedQty = asNumber(line.requestedQty);
+      if (requestedQty <= 0) continue;
 
       const { shortage } = await this.reserveAdditionalForLineTx(
         tx,
@@ -296,7 +297,7 @@ export class OutboundPickingService {
         orderId,
         line.id,
         line.itemId,
-        line.requestedQty,
+        requestedQty,
       );
 
       if (shortage > 0) {
