@@ -1,19 +1,53 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
-import { login } from '@/features/auth/api/auth.api';
+import { getLoginCompanies, login } from '@/features/auth/api/auth.api';
+import type { LoginCompany } from '@/features/auth/model/types';
 
 export function useLoginForm() {
   const router = useRouter();
-  const [companyName, setCompanyName] = useState('WarehouseHub');
+  const [companies, setCompanies] = useState<LoginCompany[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(true);
+  const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadCompanies() {
+      setCompaniesLoading(true);
+      try {
+        const res = await getLoginCompanies();
+        if (!active) return;
+        setCompanies(res.companies);
+        if (res.companies.length > 0) {
+          setCompanyName(res.companies[0]!.name);
+        }
+      } catch {
+        if (!active) return;
+        setError('회사 목록을 불러오지 못했습니다.');
+      } finally {
+        if (active) setCompaniesLoading(false);
+      }
+    }
+
+    loadCompanies();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   async function submit() {
+    if (!companyName) {
+      setError('회사를 선택해주세요.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -38,6 +72,8 @@ export function useLoginForm() {
   }
 
   return {
+    companies,
+    companiesLoading,
     companyName,
     email,
     password,

@@ -16,6 +16,10 @@ type ReserveOptions = {
 
 const logger = getModuleLogger('OutboundPickingService');
 
+function asNumber(value: Prisma.Decimal | number): number {
+  return typeof value === 'number' ? value : value.toNumber();
+}
+
 // NOTE(version policy)
 // - OutboundOrder.version / OutboundLine.version 증가는 “사용자 편집(OrdersService)”에서만 수행한다.
 // - PickingService의 auto-reserve, submit 동기화, 수동픽 예약 등 내부 상태/수량 동기화는 version을 올리지 않는다.
@@ -69,7 +73,9 @@ export class OutboundPickingService {
         // pickedQty는 "실제 픽 체크 수량"이다.
         // 다만 아직 pickedQty 갱신 경로가 없는 allocation은 qty를 fallback으로 사용해
         // submit 시 0으로 떨어지는 비정상 케이스를 방지한다.
-        const picked = a.pickedQty > 0 ? a.pickedQty : a.qty;
+        const pickedQty = asNumber(a.pickedQty);
+        const reservedQty = asNumber(a.qty);
+        const picked = pickedQty > 0 ? pickedQty : reservedQty;
         sumByLine.set(
           a.outboundLineId,
           (sumByLine.get(a.outboundLineId) ?? 0) + picked,
@@ -83,7 +89,7 @@ export class OutboundPickingService {
 
         // ✅ 정책: 부분 픽은 허용(입고 후 추가 픽 가능)
         // ❌ 초과 픽은 금지: 더 필요하면 오더 requestedQty를 먼저 늘리고 reserve/pick 진행
-        if (picked > line.requestedQty) {
+        if (picked > asNumber(line.requestedQty)) {
           throw new BadRequestException(
             `Picked quantity exceeds requested quantity (lineId=${line.id})`,
           );
@@ -172,7 +178,7 @@ export class OutboundPickingService {
       });
       if (!stock) throw new NotFoundException('Stock not found');
 
-      const available = stock.onHand - stock.reserved;
+      const available = asNumber(stock.onHand) - asNumber(stock.reserved);
       if (available < dto.qty) {
         throw new BadRequestException('Insufficient available stock');
       }
@@ -282,7 +288,8 @@ export class OutboundPickingService {
 
     for (const line of order.lines) {
       if (line.status === 'CANCELLED') continue;
-      if (line.requestedQty <= 0) continue;
+      const requestedQty = asNumber(line.requestedQty);
+      if (requestedQty <= 0) continue;
 
       const { shortage } = await this.reserveAdditionalForLineTx(
         tx,
@@ -290,7 +297,7 @@ export class OutboundPickingService {
         orderId,
         line.id,
         line.itemId,
-        line.requestedQty,
+        requestedQty,
       );
 
       if (shortage > 0) {
@@ -361,7 +368,7 @@ export class OutboundPickingService {
     for (const s of candidates) {
       if (remaining <= 0) break;
 
-      const available = s.onHand - s.reserved;
+      const available = asNumber(s.onHand) - asNumber(s.reserved);
       if (available <= 0) continue;
 
       const take = Math.min(remaining, available);
@@ -415,7 +422,8 @@ export class OutboundPickingService {
     for (const alloc of allocations) {
       if (remaining <= 0) break;
 
-      const releaseQty = Math.min(alloc.qty, remaining);
+      const allocQty = asNumber(alloc.qty);
+      const releaseQty = Math.min(allocQty, remaining);
 
       await tx.stock.update({
         where: {
@@ -428,7 +436,7 @@ export class OutboundPickingService {
         data: { reserved: { decrement: releaseQty } },
       });
 
-      if (releaseQty === alloc.qty) {
+      if (releaseQty === allocQty) {
         await tx.pickAllocation.update({
           where: { id: alloc.id },
           data: { isReleased: true, releasedAt: new Date() },
@@ -436,7 +444,7 @@ export class OutboundPickingService {
       } else {
         await tx.pickAllocation.update({
           where: { id: alloc.id },
-          data: { qty: alloc.qty - releaseQty },
+          data: { qty: allocQty - releaseQty },
         });
       }
 
@@ -468,7 +476,7 @@ export class OutboundPickingService {
             lotId: alloc.lotId,
           },
         },
-        data: { reserved: { decrement: alloc.qty } },
+        data: { reserved: { decrement: asNumber(alloc.qty) } },
       });
 
       await tx.pickAllocation.update({

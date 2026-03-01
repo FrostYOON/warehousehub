@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
@@ -22,6 +26,17 @@ type AccessTokenPayload = {
   role: string;
 };
 
+type DeviceSession = {
+  id: string;
+  deviceId: string | null;
+  deviceName: string | null;
+  userAgent: string | null;
+  ip: string | null;
+  createdAt: Date;
+  expiresAt: Date;
+  isCurrent: boolean;
+};
+
 const logger = getModuleLogger('AuthService');
 const DEFAULT_MAX_ACTIVE_DEVICES = 3;
 
@@ -43,6 +58,18 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly jwt: JwtService,
   ) {}
+
+  async listLoginCompanies() {
+    const companies = await this.prisma.company.findMany({
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    return { companies };
+  }
 
   async register(dto: RegisterDto, meta: RequestMeta) {
     const passwordHash = await hashPassword(dto.password);
@@ -229,6 +256,111 @@ export class AuthService {
     return { ok: true };
   }
 
+  async listDeviceSessions(
+    userId: string,
+    currentRefreshToken?: string,
+  ): Promise<{ devices: DeviceSession[]; maxActiveDevices: number }> {
+    const now = new Date();
+    const currentTokenHash = currentRefreshToken
+      ? hashToken(currentRefreshToken)
+      : undefined;
+
+    const tokens = await this.prisma.refreshToken.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      select: {
+        id: true,
+        tokenHash: true,
+        deviceId: true,
+        deviceName: true,
+        userAgent: true,
+        ip: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+    });
+
+    return {
+      devices: tokens
+        .map((token) => ({
+          id: token.id,
+          deviceId: token.deviceId,
+          deviceName: token.deviceName,
+          userAgent: token.userAgent,
+          ip: token.ip,
+          createdAt: token.createdAt,
+          expiresAt: token.expiresAt,
+          isCurrent:
+            currentTokenHash != null && token.tokenHash === currentTokenHash,
+        }))
+        .sort((a, b) => {
+          if (a.isCurrent !== b.isCurrent) {
+            return a.isCurrent ? -1 : 1;
+          }
+          return b.createdAt.getTime() - a.createdAt.getTime();
+        }),
+      maxActiveDevices: getMaxActiveDevices(),
+    };
+  }
+
+  async revokeDeviceSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ ok: true }> {
+    const target = await this.prisma.refreshToken.findFirst({
+      where: {
+        id: sessionId,
+        userId,
+        revokedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (!target) {
+      throw new NotFoundException('Device session not found');
+    }
+
+    await this.prisma.refreshToken.update({
+      where: { id: sessionId },
+      data: { revokedAt: new Date() },
+    });
+
+    logger.warn({ event: 'auth.device_session.revoked', userId, sessionId });
+
+    return { ok: true };
+  }
+
+  async logoutOtherDevices(
+    userId: string,
+    currentRefreshToken?: string,
+  ): Promise<{ ok: true; revokedCount: number }> {
+    if (!currentRefreshToken) {
+      throw new UnauthorizedException('Refresh cookie missing');
+    }
+
+    const currentTokenHash = hashToken(currentRefreshToken);
+    const result = await this.prisma.refreshToken.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        tokenHash: { not: currentTokenHash },
+      },
+      data: { revokedAt: new Date() },
+    });
+
+    logger.warn({
+      event: 'auth.device_session.logout_others',
+      userId,
+      revokedCount: result.count,
+    });
+
+    return { ok: true, revokedCount: result.count };
+  }
+
   private async issueAccessToken(payload: AccessTokenPayload): Promise<string> {
     return this.jwt.signAsync({
       sub: payload.userId,
@@ -256,7 +388,9 @@ export class AuthService {
         select: { id: true, deviceId: true },
       });
 
-      const isExistingDevice = activeTokens.some((t) => t.deviceId === deviceId);
+      const isExistingDevice = activeTokens.some(
+        (t) => t.deviceId === deviceId,
+      );
       const activeDeviceCount = new Set(
         activeTokens
           .map((t) => t.deviceId)

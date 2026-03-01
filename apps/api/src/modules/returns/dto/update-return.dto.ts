@@ -4,7 +4,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
-  IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -37,7 +37,10 @@ export class UpdateReturnLineDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsInt()
+  @IsNumber(
+    { maxDecimalPlaces: 3 },
+    { message: 'qty must have up to 3 decimal places' },
+  )
   @Min(1)
   qty?: number;
 

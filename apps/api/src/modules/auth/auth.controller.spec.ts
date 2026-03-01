@@ -12,6 +12,9 @@ describe('AuthController', () => {
     refresh: jest.fn(),
     logout: jest.fn(),
     me: jest.fn(),
+    listDeviceSessions: jest.fn(),
+    revokeDeviceSession: jest.fn(),
+    logoutOtherDevices: jest.fn(),
     withdraw: jest.fn(),
   };
 
@@ -79,6 +82,51 @@ describe('AuthController', () => {
     await controller.me(user as CurrentUserPayload);
 
     expect(authServiceMock.me).toHaveBeenCalledWith('user-1');
+  });
+
+  it('devices forwards user id and refresh token', async () => {
+    const user = { userId: 'user-1', companyId: 'company-1', role: 'ADMIN' };
+    authServiceMock.listDeviceSessions.mockResolvedValueOnce({ devices: [] });
+
+    await controller.devices(user as CurrentUserPayload, 'refresh-token');
+
+    expect(authServiceMock.listDeviceSessions).toHaveBeenCalledWith(
+      'user-1',
+      'refresh-token',
+    );
+  });
+
+  it('revokeDeviceSession forwards user id and session id', async () => {
+    const user = { userId: 'user-1', companyId: 'company-1', role: 'ADMIN' };
+    authServiceMock.revokeDeviceSession.mockResolvedValueOnce({ ok: true });
+
+    await controller.revokeDeviceSession(
+      user as CurrentUserPayload,
+      'session-1',
+    );
+
+    expect(authServiceMock.revokeDeviceSession).toHaveBeenCalledWith(
+      'user-1',
+      'session-1',
+    );
+  });
+
+  it('logoutOtherDevices forwards user id and refresh token', async () => {
+    const user = { userId: 'user-1', companyId: 'company-1', role: 'ADMIN' };
+    authServiceMock.logoutOtherDevices.mockResolvedValueOnce({
+      ok: true,
+      revokedCount: 2,
+    });
+
+    await controller.logoutOtherDevices(
+      user as CurrentUserPayload,
+      'refresh-token',
+    );
+
+    expect(authServiceMock.logoutOtherDevices).toHaveBeenCalledWith(
+      'user-1',
+      'refresh-token',
+    );
   });
 
   it('withdraw forwards companyId and userId', async () => {

@@ -3,7 +3,7 @@ import {
   IsArray,
   IsDateString,
   IsEnum,
-  IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -31,7 +31,10 @@ class CreateReturnLineDto {
   expiryDate?: string;
 
   @ApiProperty()
-  @IsInt()
+  @IsNumber(
+    { maxDecimalPlaces: 3 },
+    { message: 'qty must have up to 3 decimal places' },
+  )
   @Min(1)
   qty!: number;
 }

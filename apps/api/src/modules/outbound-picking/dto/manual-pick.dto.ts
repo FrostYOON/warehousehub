@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsUUID, Min } from 'class-validator';
+import { IsNumber, IsUUID, Min } from 'class-validator';
 
 export class ManualPickDto {
   @ApiProperty()
@@ -15,7 +15,10 @@ export class ManualPickDto {
   lotId!: string;
 
   @ApiProperty()
-  @IsInt()
+  @IsNumber(
+    { maxDecimalPlaces: 3 },
+    { message: 'qty must have up to 3 decimal places' },
+  )
   @Min(1)
   qty!: number;
 }

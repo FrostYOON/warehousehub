@@ -4,6 +4,8 @@ import { useLoginForm } from '@/features/auth/hooks/use-login-form';
 
 export function LoginForm() {
   const {
+    companies,
+    companiesLoading,
     companyName,
     email,
     password,
@@ -30,13 +32,24 @@ export function LoginForm() {
 
         <div className="space-y-1">
           <label className="text-sm font-medium text-slate-700">Company</label>
-          <input
+          <select
             className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
-            disabled={submitting}
-            autoComplete="organization"
-          />
+            disabled={submitting || companiesLoading || companies.length === 0}
+          >
+            {companiesLoading ? (
+              <option value="">Loading companies...</option>
+            ) : companies.length === 0 ? (
+              <option value="">No companies available</option>
+            ) : (
+              companies.map((company) => (
+                <option key={company.id} value={company.name}>
+                  {company.name}
+                </option>
+              ))
+            )}
+          </select>
         </div>
 
         <div className="space-y-1">
@@ -70,7 +83,7 @@ export function LoginForm() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || companiesLoading || companies.length === 0}
           className="h-11 w-full rounded-lg bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
         >
           {submitting ? 'Signing in...' : 'Sign in'}

@@ -31,6 +31,10 @@ const EDITABLE_UNTIL_READY: OutboundStatus[] = [
 
 const logger = getModuleLogger('OutboundOrdersService');
 
+function asNumber(value: Prisma.Decimal | number): number {
+  return typeof value === 'number' ? value : value.toNumber();
+}
+
 @Injectable()
 export class OutboundOrdersService {
   constructor(
@@ -194,7 +198,7 @@ export class OutboundOrdersService {
         throw new BadRequestException('Cannot modify cancelled line');
       }
 
-      const diff = newQty - line.requestedQty;
+      const diff = newQty - asNumber(line.requestedQty);
 
       // 감소: diff<0 → 그만큼 release
       if (diff < 0) {
@@ -270,7 +274,7 @@ export class OutboundOrdersService {
         },
         _sum: { qty: true },
       });
-      const reservedQty = sum._sum.qty ?? 0;
+      const reservedQty = sum._sum.qty ? asNumber(sum._sum.qty) : 0;
 
       if (reservedQty > 0) {
         await this.picking.releaseQtyForLineTx(

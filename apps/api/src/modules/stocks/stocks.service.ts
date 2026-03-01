@@ -6,18 +6,21 @@ import { StorageType } from '@prisma/client';
 export class StocksService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(params: {
+  async list(params: {
     companyId: string;
     storageType?: StorageType;
     itemCode?: string;
   }) {
     const { companyId, storageType, itemCode } = params;
+    const normalizedItemCode = itemCode?.trim() || undefined;
 
-    return this.prisma.stock.findMany({
+    const rows = await this.prisma.stock.findMany({
       where: {
         companyId,
         warehouse: storageType ? { type: storageType } : undefined,
-        lot: itemCode ? { item: { itemCode } } : undefined,
+        lot: normalizedItemCode
+          ? { item: { itemCode: normalizedItemCode } }
+          : undefined,
       },
       orderBy: [
         {
@@ -54,5 +57,11 @@ export class StocksService {
         },
       },
     });
+
+    return rows.map((row) => ({
+      ...row,
+      onHand: Number(row.onHand.toString()),
+      reserved: Number(row.reserved.toString()),
+    }));
   }
 }

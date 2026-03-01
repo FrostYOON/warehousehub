@@ -4,10 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { InventoryTxType, OutboundStatus } from '@prisma/client';
+import { InventoryTxType, OutboundStatus, Prisma } from '@prisma/client';
 import { getModuleLogger } from '../../common/logging/module-logger';
 
 const logger = getModuleLogger('OutboundShippingService');
+
+function asNumber(value: Prisma.Decimal | number): number {
+  return typeof value === 'number' ? value : value.toNumber();
+}
 
 @Injectable()
 export class OutboundShippingService {
@@ -106,8 +110,10 @@ export class OutboundShippingService {
 
       // 1) 재고 커밋: reserved 감소 + onHand 감소
       for (const alloc of allocations) {
-        const committedQty = alloc.pickedQty > 0 ? alloc.pickedQty : alloc.qty;
-        if (committedQty > alloc.qty) {
+        const pickedQty = asNumber(alloc.pickedQty);
+        const reservedQty = asNumber(alloc.qty);
+        const committedQty = pickedQty > 0 ? pickedQty : reservedQty;
+        if (committedQty > reservedQty) {
           throw new BadRequestException(
             `Picked quantity exceeds reserved quantity (allocationId=${alloc.id})`,
           );
@@ -124,7 +130,7 @@ export class OutboundShippingService {
           data: {
             // 배송 완료 시점에 미픽 물량은 예약 해제되고,
             // 실제 픽 물량만 onHand에서 차감된다.
-            reserved: { decrement: alloc.qty },
+            reserved: { decrement: reservedQty },
             onHand: { decrement: committedQty },
           },
         });
@@ -139,7 +145,9 @@ export class OutboundShippingService {
       // 커밋된 allocation 수량(=이번 complete에서 처리한 allocations)의 라인별 합계를 shippedQty로 기록
       const shippedByLineId = new Map<string, number>();
       for (const a of allocations) {
-        const committedQty = a.pickedQty > 0 ? a.pickedQty : a.qty;
+        const pickedQty = asNumber(a.pickedQty);
+        const reservedQty = asNumber(a.qty);
+        const committedQty = pickedQty > 0 ? pickedQty : reservedQty;
         shippedByLineId.set(
           a.outboundLineId,
           (shippedByLineId.get(a.outboundLineId) ?? 0) + committedQty,

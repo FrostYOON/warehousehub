@@ -1,10 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
+  IsNumber,
   IsString,
   IsUUID,
   ValidateNested,
-  IsInt,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -15,7 +15,10 @@ class CreateOutboundLineDto {
   itemId!: string;
 
   @ApiProperty()
-  @IsInt()
+  @IsNumber(
+    { maxDecimalPlaces: 3 },
+    { message: 'requestedQty must have up to 3 decimal places' },
+  )
   @Min(1)
   requestedQty!: number;
 }
