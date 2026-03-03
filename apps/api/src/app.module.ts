@@ -14,6 +14,7 @@ import { OutboundShippingModule } from './modules/outbound-shipping/outbound-shi
 import { OutboundPickingModule } from './modules/outbound-picking/outbound-picking.module';
 import { ReturnsModule } from './modules/returns/returns.module';
 import { LoggingModule } from './common/logging/logging.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { LoggingModule } from './common/logging/logging.module';
     OutboundShippingModule,
     OutboundPickingModule,
     ReturnsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

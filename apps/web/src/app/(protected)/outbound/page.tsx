@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { useOutboundPage } from '@/features/outbound/hooks/use-outbound-page';
@@ -8,9 +9,11 @@ import type { StorageType } from '@/features/stocks/model/types';
 import { ActionButton, StatusBadge } from '@/shared/ui/common';
 
 export default function OutboundPage() {
+  const searchParams = useSearchParams();
   const { me, loggingOut, signOut } = useAuthSession();
   const {
     customers,
+    orders,
     filteredOrders,
     selectedOrder,
     loadingList,
@@ -113,6 +116,112 @@ export default function OutboundPage() {
       prev.includes(type) ? prev.filter((value) => value !== type) : [...prev, type],
     );
   };
+
+  const presetStatuses = useMemo(() => {
+    const statuses = searchParams.get('statuses');
+    if (!statuses) return [];
+    const validSet = new Set([
+      'DRAFT',
+      'PICKING',
+      'PICKED',
+      'READY_TO_SHIP',
+      'SHIPPING',
+      'DELIVERED',
+      'CANCELLED',
+    ]);
+    return statuses
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => validSet.has(value));
+  }, [searchParams]);
+
+  const drilldownFilters = useMemo(() => {
+    const itemId = searchParams.get('itemId') ?? '';
+    const customerId = searchParams.get('customerId') ?? '';
+    const from = searchParams.get('from') ?? '';
+    const to = searchParams.get('to') ?? '';
+    const storageType = searchParams.get('storageType') ?? '';
+    return { itemId, customerId, from, to, storageType };
+  }, [searchParams]);
+
+  const displayedOrders = useMemo(() => {
+    const scope = new Set(presetStatuses);
+    let base =
+      presetStatuses.length > 0 && !statusFilter
+        ? orders.filter((order) => scope.has(order.status))
+        : filteredOrders;
+
+    const key = keyword.trim().toLowerCase();
+    base = base.filter((order) => {
+      const keyMatched = key
+        ? order.id.toLowerCase().includes(key) ||
+          String(order.orderNo ?? '').includes(key) ||
+          (order.customer?.name ?? order.customer?.customerName ?? '')
+            .toLowerCase()
+            .includes(key)
+        : true;
+      return keyMatched;
+    });
+
+    if (drilldownFilters.customerId) {
+      base = base.filter((order) => order.customerId === drilldownFilters.customerId);
+    }
+    if (drilldownFilters.itemId) {
+      base = base.filter((order) => order.lines.some((line) => line.itemId === drilldownFilters.itemId));
+    }
+    if (drilldownFilters.from) {
+      const from = new Date(drilldownFilters.from);
+      base = base.filter((order) => new Date(order.plannedDate) >= from);
+    }
+    if (drilldownFilters.to) {
+      const to = new Date(drilldownFilters.to);
+      to.setDate(to.getDate() + 1);
+      base = base.filter((order) => new Date(order.plannedDate) < to);
+    }
+    if (
+      drilldownFilters.storageType === 'DRY' ||
+      drilldownFilters.storageType === 'COOL' ||
+      drilldownFilters.storageType === 'FRZ'
+    ) {
+      const itemTypeMap = new Map(
+        availableCreateItems.map((item) => [item.id, new Set(item.storageTypes)]),
+      );
+      base = base.filter((order) =>
+        order.lines.some((line) =>
+          itemTypeMap.get(line.itemId)?.has(drilldownFilters.storageType as StorageType),
+        ),
+      );
+    }
+
+    return base;
+  }, [
+    availableCreateItems,
+    drilldownFilters,
+    filteredOrders,
+    keyword,
+    orders,
+    presetStatuses,
+    statusFilter,
+  ]);
+
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (
+      status === 'DRAFT' ||
+      status === 'PICKING' ||
+      status === 'PICKED' ||
+      status === 'READY_TO_SHIP' ||
+      status === 'SHIPPING' ||
+      status === 'DELIVERED' ||
+      status === 'CANCELLED'
+    ) {
+      setStatusFilter(status);
+    }
+    const key = searchParams.get('keyword');
+    if (key) {
+      setKeyword(key);
+    }
+  }, [searchParams, setKeyword, setStatusFilter]);
 
   return (
     <DashboardShell
@@ -283,6 +392,15 @@ export default function OutboundPage() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-base font-semibold text-slate-800">오더 목록</h3>
+        {(drilldownFilters.itemId ||
+          drilldownFilters.customerId ||
+          drilldownFilters.storageType ||
+          drilldownFilters.from ||
+          drilldownFilters.to) && (
+          <p className="mt-1 text-xs text-slate-500">
+            대시보드 드릴다운 필터가 적용되었습니다.
+          </p>
+        )}
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
           <select
             value={statusFilter}
@@ -307,7 +425,7 @@ export default function OutboundPage() {
         </div>
         {loadingList ? (
           <p className="mt-3 text-sm text-slate-600">목록을 불러오는 중...</p>
-        ) : filteredOrders.length === 0 ? (
+        ) : displayedOrders.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">등록된 출고 오더가 없습니다.</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
@@ -323,7 +441,7 @@ export default function OutboundPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.map((order) => (
+                {displayedOrders.map((order) => (
                   <tr key={order.id} className="border-t border-slate-100">
                     <td className="px-2 py-2 font-medium text-slate-700">
                       {outboundDisplayNo(order)}

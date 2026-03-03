@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
 import { canAccessInbound } from '@/features/auth/model/role-policy';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
@@ -10,6 +10,7 @@ import { ActionButton, StatusBadge } from '@/shared/ui/common';
 
 export default function InboundPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { me, loggingOut, signOut } = useAuthSession();
   const canAccess = canAccessInbound(me?.role);
   const {
@@ -50,6 +51,17 @@ export default function InboundPage() {
       router.replace('/');
     }
   }, [canAccess, me, router]);
+
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (status === 'UPLOADED' || status === 'CONFIRMED' || status === 'CANCELLED') {
+      setStatusFilter(status);
+    }
+    const key = searchParams.get('keyword');
+    if (key) {
+      setKeyword(key);
+    }
+  }, [searchParams, setKeyword, setStatusFilter]);
 
   return (
     <DashboardShell

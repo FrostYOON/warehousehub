@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { useReturnsPage } from '@/features/returns/hooks/use-returns-page';
@@ -8,10 +9,12 @@ import type { StorageType } from '@/features/returns/model/types';
 import { ActionButton, StatusBadge } from '@/shared/ui/common';
 
 export default function ReturnsPage() {
+  const searchParams = useSearchParams();
   const { me, loggingOut, signOut } = useAuthSession();
   const {
     customers,
     items,
+    receipts,
     filteredReceipts,
     selected,
     loadingList,
@@ -95,6 +98,50 @@ export default function ReturnsPage() {
 
   const selectedItemCount = Object.values(createItemChecked).filter(Boolean).length;
 
+  const presetStatuses = useMemo(() => {
+    const statuses = searchParams.get('statuses');
+    if (!statuses) return [];
+    const validSet = new Set(['RECEIVED', 'DECIDED', 'COMPLETED', 'CANCELLED']);
+    return statuses
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => validSet.has(value));
+  }, [searchParams]);
+
+  const displayedReceipts = useMemo(() => {
+    if (presetStatuses.length === 0 || statusFilter) return filteredReceipts;
+    const scope = new Set(presetStatuses);
+    return receipts
+      .filter((receipt) => scope.has(receipt.status))
+      .filter((receipt) => {
+        const key = keyword.trim().toLowerCase();
+        const keyMatched = key
+          ? receipt.id.toLowerCase().includes(key) ||
+            String(receipt.receiptNo ?? '').includes(key) ||
+            (receipt.customer?.name ?? receipt.customer?.customerName ?? '')
+              .toLowerCase()
+              .includes(key)
+          : true;
+        return keyMatched;
+      });
+  }, [filteredReceipts, keyword, presetStatuses, receipts, statusFilter]);
+
+  useEffect(() => {
+    const status = searchParams.get('status');
+    if (
+      status === 'RECEIVED' ||
+      status === 'DECIDED' ||
+      status === 'COMPLETED' ||
+      status === 'CANCELLED'
+    ) {
+      setStatusFilter(status);
+    }
+    const key = searchParams.get('keyword');
+    if (key) {
+      setKeyword(key);
+    }
+  }, [searchParams, setKeyword, setStatusFilter]);
+
   return (
     <DashboardShell
       userName={me?.name ?? '사용자'}
@@ -158,7 +205,7 @@ export default function ReturnsPage() {
         </div>
         {loadingList ? (
           <p className="mt-3 text-sm text-slate-600">목록을 불러오는 중...</p>
-        ) : filteredReceipts.length === 0 ? (
+        ) : displayedReceipts.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">반품 접수 내역이 없습니다.</p>
         ) : (
           <div className="mt-3 overflow-x-auto">
@@ -174,7 +221,7 @@ export default function ReturnsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredReceipts.map((receipt) => (
+                {displayedReceipts.map((receipt) => (
                   <tr key={receipt.id} className="border-t border-slate-100">
                     <td className="px-2 py-2 font-medium text-slate-700">
                       {returnDisplayNo(receipt)}

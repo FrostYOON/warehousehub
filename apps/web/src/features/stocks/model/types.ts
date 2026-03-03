@@ -24,4 +24,41 @@ export type StockRow = {
 export type StocksQuery = {
   storageType?: StorageType;
   itemCode?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type StocksListResponse = {
+  items: StockRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export type ItemAnalyticsRange = 'WEEK' | 'QUARTER' | 'HALF' | 'YEAR';
+
+export type StockItemOption = {
+  id: string;
+  itemCode: string;
+  itemName: string;
+};
+
+export type StockItemTrendBucket = {
+  label: string;
+  outboundQty: number;
+  returnQty: number;
+  returnRate: number;
+};
+
+export type StockItemTrend = {
+  item: StockItemOption | null;
+  range: ItemAnalyticsRange;
+  buckets: StockItemTrendBucket[];
+  totals: {
+    outboundQty: number;
+    returnQty: number;
+    returnRate: number;
+  };
+  asOf: string;
 };
