@@ -94,26 +94,68 @@ export class OutboundOrdersService {
         lineCount: dto.lines.length,
       });
 
-      return tx.outboundOrder.findFirst({
+      const created = await tx.outboundOrder.findFirst({
         where: { id: order.id, companyId },
-        include: { customer: true, lines: true },
+        include: {
+          customer: true,
+          lines: {
+            include: {
+              item: {
+                select: {
+                  id: true,
+                  itemCode: true,
+                  itemName: true,
+                },
+              },
+            },
+          },
+        },
       });
+      return this.normalizeOrderQty(created);
     });
   }
 
-  list(companyId: string) {
-    return this.prisma.outboundOrder.findMany({
+  async list(companyId: string) {
+    const orders = await this.prisma.outboundOrder.findMany({
       where: { companyId },
       orderBy: { plannedDate: 'asc' },
-      include: { customer: true, lines: true },
+      include: {
+        customer: true,
+        lines: {
+          include: {
+            item: {
+              select: {
+                id: true,
+                itemCode: true,
+                itemName: true,
+              },
+            },
+          },
+        },
+      },
     });
+    return orders.map((order) => this.normalizeOrderQty(order));
   }
 
-  detail(companyId: string, id: string) {
-    return this.prisma.outboundOrder.findFirst({
+  async detail(companyId: string, id: string) {
+    const order = await this.prisma.outboundOrder.findFirst({
       where: { id, companyId },
-      include: { customer: true, lines: true },
+      include: {
+        customer: true,
+        lines: {
+          include: {
+            item: {
+              select: {
+                id: true,
+                itemCode: true,
+                itemName: true,
+              },
+            },
+          },
+        },
+      },
     });
+    return this.normalizeOrderQty(order);
   }
 
   // -----------------------------
@@ -461,5 +503,19 @@ export class OutboundOrdersService {
     if (items.length !== uniqueItemIds.length) {
       throw new BadRequestException('Invalid itemId for company');
     }
+  }
+
+  private normalizeOrderQty<T extends { lines: Array<any> } | null>(order: T): T {
+    if (!order) return order;
+    return {
+      ...order,
+      lines: order.lines.map((line) => ({
+        ...line,
+        requestedQty: asNumber(line.requestedQty),
+        pickedQty: asNumber(line.pickedQty),
+        shippedQty: asNumber(line.shippedQty),
+        deliveredQty: asNumber(line.deliveredQty),
+      })),
+    } as T;
   }
 }

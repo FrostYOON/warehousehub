@@ -5,15 +5,16 @@ import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { getLoginCompanies, login } from '@/features/auth/api/auth.api';
 import type { LoginCompany } from '@/features/auth/model/types';
+import { useToast } from '@/shared/ui/toast/toast-provider';
 
 export function useLoginForm() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [companies, setCompanies] = useState<LoginCompany[]>([]);
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [companyName, setCompanyName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export function useLoginForm() {
         }
       } catch {
         if (!active) return;
-        setError('회사 목록을 불러오지 못했습니다.');
+        showToast('회사 목록을 불러오지 못했습니다.', 'error');
       } finally {
         if (active) setCompaniesLoading(false);
       }
@@ -40,16 +41,15 @@ export function useLoginForm() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [showToast]);
 
   async function submit() {
     if (!companyName) {
-      setError('회사를 선택해주세요.');
+      showToast('회사를 선택해주세요.', 'error');
       return;
     }
 
     setSubmitting(true);
-    setError(null);
 
     try {
       await login({ companyName, email, password });
@@ -59,12 +59,12 @@ export function useLoginForm() {
       if (axios.isAxiosError(err)) {
         const payload = err.response?.data as { message?: string | string[] };
         if (Array.isArray(payload?.message)) {
-          setError(payload.message[0] ?? 'Login failed');
+          showToast(payload.message[0] ?? '로그인에 실패했습니다.', 'error');
         } else {
-          setError(payload?.message ?? 'Login failed');
+          showToast(payload?.message ?? '로그인에 실패했습니다.', 'error');
         }
       } else {
-        setError('Login failed');
+        showToast('로그인에 실패했습니다.', 'error');
       }
     } finally {
       setSubmitting(false);
@@ -77,7 +77,6 @@ export function useLoginForm() {
     companyName,
     email,
     password,
-    error,
     submitting,
     setCompanyName,
     setEmail,

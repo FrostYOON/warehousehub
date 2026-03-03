@@ -1,6 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useLoginForm } from '@/features/auth/hooks/use-login-form';
+import { SIGNUP_PATH } from '@/features/auth/model/constants';
 
 export function LoginForm() {
   const {
@@ -9,7 +11,6 @@ export function LoginForm() {
     companyName,
     email,
     password,
-    error,
     submitting,
     setCompanyName,
     setEmail,
@@ -75,12 +76,6 @@ export function LoginForm() {
           />
         </div>
 
-        {error && (
-          <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        )}
-
         <button
           type="submit"
           disabled={submitting || companiesLoading || companies.length === 0}
@@ -88,6 +83,13 @@ export function LoginForm() {
         >
           {submitting ? 'Signing in...' : 'Sign in'}
         </button>
+
+        <p className="text-center text-sm text-slate-600">
+          계정이 없나요?{' '}
+          <Link href={SIGNUP_PATH} className="font-medium text-slate-900 underline">
+            회원가입 신청
+          </Link>
+        </p>
       </form>
     </div>
   );

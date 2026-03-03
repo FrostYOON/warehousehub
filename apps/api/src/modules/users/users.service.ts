@@ -102,6 +102,7 @@ export class UsersService {
     name: string;
     passwordHash: string;
     role: Role;
+    isActive?: boolean;
   }) {
     try {
       const created = await this.prisma.user.create({
@@ -111,7 +112,7 @@ export class UsersService {
           name: params.name,
           passwordHash: params.passwordHash,
           role: params.role,
-          isActive: true,
+          isActive: params.isActive ?? true,
         },
         select: {
           id: true,
@@ -194,5 +195,33 @@ export class UsersService {
       userId,
     });
     return deactivated;
+  }
+
+  async activate(companyId: string, userId: string) {
+    const user = await this.prisma.user.updateMany({
+      where: { id: userId, companyId },
+      data: { isActive: true },
+    });
+
+    if (user.count === 0) throw new NotFoundException('User not found');
+
+    const activated = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    logger.info({
+      event: 'users.activated',
+      companyId,
+      userId,
+    });
+    return activated;
   }
 }
