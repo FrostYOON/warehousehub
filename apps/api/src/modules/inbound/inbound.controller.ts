@@ -62,6 +62,26 @@ export class InboundController {
     });
   }
 
+  @Get('uploads')
+  @ApiOkResponse({
+    schema: {
+      example: [
+        {
+          id: 'uuid',
+          fileName: 'inbound.xlsx',
+          status: 'UPLOADED',
+          createdAt: '2026-03-01T00:00:00.000Z',
+          confirmedAt: null,
+          invalidCount: 0,
+          rowCount: 12,
+        },
+      ],
+    },
+  })
+  list(@Req() req: Request) {
+    return this.inbound.listUploads(req.user!.companyId);
+  }
+
   @Get('uploads/:id')
   @ApiOkResponse({ type: InboundUploadResponse })
   get(@Req() req: Request, @Param('id') id: string) {
@@ -75,6 +95,15 @@ export class InboundController {
       companyId: req.user!.companyId,
       uploadId: id,
       actorUserId: req.user!.userId,
+    });
+  }
+
+  @Post('uploads/:id/cancel')
+  @ApiOkResponse({ schema: { example: { ok: true } } })
+  cancel(@Req() req: Request, @Param('id') id: string) {
+    return this.inbound.cancelUpload({
+      companyId: req.user!.companyId,
+      uploadId: id,
     });
   }
 }

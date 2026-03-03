@@ -71,4 +71,10 @@ export class UsersController {
     const { companyId } = req.user!;
     return this.users.deactivate(companyId, id);
   }
+
+  @Patch(':id/activate')
+  activate(@Req() req: Request, @Param('id') id: string) {
+    const { companyId } = req.user!;
+    return this.users.activate(companyId, id);
+  }
 }

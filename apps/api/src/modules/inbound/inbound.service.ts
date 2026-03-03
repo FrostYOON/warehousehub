@@ -29,6 +29,10 @@ const REQUIRED_COLUMNS = [
 
 const logger = getModuleLogger('InboundService');
 
+function asNumber(value: Prisma.Decimal | number): number {
+  return typeof value === 'number' ? value : value.toNumber();
+}
+
 function toCellString(raw: unknown): string {
   if (raw === null || raw === undefined) return '';
   if (typeof raw === 'string') return raw;
@@ -74,11 +78,13 @@ export class InboundService {
   }
 
   private parseExpiryDate(raw: unknown): Date | null {
-    if (raw === null || raw === undefined) return null;
+    if (raw === null || raw === undefined) {
+      throw new Error('ExpiryDate is required');
+    }
 
     // 1) "-" / 빈값 처리
     const s = toCellString(raw).trim();
-    if (!s || s === '-') return null;
+    if (!s || s === '-') throw new Error('ExpiryDate is required');
 
     // 2) Date 객체로 들어오는 케이스 (cellDates: true)
     if (raw instanceof Date) {
@@ -236,7 +242,39 @@ export class InboundService {
     });
 
     if (!upload) throw new NotFoundException('Upload not found');
-    return upload;
+    return {
+      ...upload,
+      rows: upload.rows.map((row) => ({
+        ...row,
+        quantity: asNumber(row.quantity),
+      })),
+    };
+  }
+
+  async listUploads(companyId: string) {
+    const uploads = await this.prisma.inboundUpload.findMany({
+      where: { companyId },
+      include: {
+        rows: {
+          select: { isValid: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    return uploads.map((upload) => {
+      const invalidCount = upload.rows.filter((row) => !row.isValid).length;
+      return {
+        id: upload.id,
+        fileName: upload.fileName,
+        status: upload.status,
+        createdAt: upload.createdAt,
+        confirmedAt: upload.confirmedAt,
+        invalidCount,
+        rowCount: upload.rows.length,
+      };
+    });
   }
 
   async confirmUpload(params: {
@@ -408,5 +446,32 @@ export class InboundService {
       });
       return { ok: true };
     });
+  }
+
+  async cancelUpload(params: { companyId: string; uploadId: string }) {
+    const { companyId, uploadId } = params;
+
+    const claimed = await this.prisma.inboundUpload.updateMany({
+      where: {
+        id: uploadId,
+        companyId,
+        status: 'UPLOADED',
+      },
+      data: {
+        status: 'CANCELLED',
+      },
+    });
+
+    if (claimed.count !== 1) {
+      throw new BadRequestException('Only UPLOADED upload can be cancelled');
+    }
+
+    logger.info({
+      event: 'inbound.cancel.success',
+      companyId,
+      uploadId,
+    });
+
+    return { ok: true };
   }
 }

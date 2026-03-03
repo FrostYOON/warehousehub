@@ -1,8 +1,10 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
@@ -18,6 +20,7 @@ import {
 import { getModuleLogger } from '../../common/logging/module-logger';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
+import type { SignupRequestDto } from './dto/signup-request.dto';
 import type { RequestMeta } from './http/decorators/req-meta.decorator';
 
 type AccessTokenPayload = {
@@ -113,6 +116,43 @@ export class AuthService {
         companyName: company.name,
       },
     };
+  }
+
+  async signupRequest(dto: SignupRequestDto) {
+    const company = await this.users.findCompanyByName(dto.companyName);
+    if (!company) {
+      throw new NotFoundException('Company not found');
+    }
+
+    const passwordHash = await hashPassword(dto.password);
+
+    try {
+      const user = await this.users.createUser({
+        companyId: company.id,
+        email: dto.email,
+        name: dto.name,
+        passwordHash,
+        role: dto.role,
+        isActive: false,
+      });
+
+      logger.info({
+        event: 'auth.signup_request.created',
+        companyId: company.id,
+        userId: user.id,
+        role: dto.role,
+      });
+
+      return {
+        ok: true,
+        message: 'Signup request submitted. Awaiting company admin approval.',
+      };
+    } catch (error) {
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Email already in use');
+      }
+      throw error;
+    }
   }
 
   async login(dto: LoginDto, meta: RequestMeta = {}) {

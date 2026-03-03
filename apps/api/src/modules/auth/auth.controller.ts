@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { SignupRequestDto } from './dto/signup-request.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -55,6 +56,12 @@ export class AuthController {
   @ApiOkResponse({ type: LoginResponseDto })
   register(@Body() dto: RegisterDto, @RequestMeta() meta: RequestMetaType) {
     return this.auth.register(dto, meta);
+  }
+
+  @Post('signup-request')
+  @ApiOkResponse({ type: OkResponseDto })
+  signupRequest(@Body() dto: SignupRequestDto) {
+    return this.auth.signupRequest(dto);
   }
 
   @Post('login')

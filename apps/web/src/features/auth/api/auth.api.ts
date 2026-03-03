@@ -1,10 +1,12 @@
 import { httpClient } from '@/shared/api/http-client';
 import type {
+  CompanyUser,
   DeviceSessionsResponse,
   LoginCompaniesResponse,
   LoginRequest,
   LogoutOthersResponse,
   MeResponse,
+  SignupRequest,
 } from '@/features/auth/model/types';
 
 export async function login(payload: LoginRequest): Promise<void> {
@@ -14,6 +16,10 @@ export async function login(payload: LoginRequest): Promise<void> {
 export async function getLoginCompanies(): Promise<LoginCompaniesResponse> {
   const res = await httpClient.get<LoginCompaniesResponse>('/auth/companies');
   return res.data;
+}
+
+export async function signupRequest(payload: SignupRequest): Promise<void> {
+  await httpClient.post('/auth/signup-request', payload);
 }
 
 export async function getMe(): Promise<MeResponse> {
@@ -39,4 +45,13 @@ export async function logoutOtherDevices(): Promise<LogoutOthersResponse> {
     '/auth/devices/logout-others',
   );
   return res.data;
+}
+
+export async function getCompanyUsers(): Promise<CompanyUser[]> {
+  const res = await httpClient.get<CompanyUser[]>('/users');
+  return res.data;
+}
+
+export async function approveCompanyUser(userId: string): Promise<void> {
+  await httpClient.patch(`/users/${userId}/activate`);
 }

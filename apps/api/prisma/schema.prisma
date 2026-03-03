@@ -509,6 +509,7 @@ model PickAllocation {
 
 model ReturnReceipt {
   id        String  @id @default(uuid())
+  receiptNo Int     @unique @default(autoincrement())
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 

@@ -7,4 +7,7 @@ export type DashboardSummary = {
 export type DashboardMenu = {
   label: string;
   description: string;
+  href: string;
+  disabled?: boolean;
+  disabledReason?: string;
 };
