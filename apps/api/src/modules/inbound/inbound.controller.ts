@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -25,6 +26,10 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { InboundService } from './inbound.service';
 import { InboundUploadResponse } from './dto/inbound-upload.response.dto';
+import {
+  InboundUploadDetailQueryDto,
+  InboundUploadsQueryDto,
+} from './dto/inbound-query.dto';
 
 @ApiTags('Inbound')
 @ApiBearerAuth('access-token')
@@ -78,14 +83,18 @@ export class InboundController {
       ],
     },
   })
-  list(@Req() req: Request) {
-    return this.inbound.listUploads(req.user!.companyId);
+  list(@Req() req: Request, @Query() query: InboundUploadsQueryDto) {
+    return this.inbound.listUploads(req.user!.companyId, query);
   }
 
   @Get('uploads/:id')
   @ApiOkResponse({ type: InboundUploadResponse })
-  get(@Req() req: Request, @Param('id') id: string) {
-    return this.inbound.getUpload(req.user!.companyId, id);
+  get(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Query() query: InboundUploadDetailQueryDto,
+  ) {
+    return this.inbound.getUpload(req.user!.companyId, id, query);
   }
 
   @Post('uploads/:id/confirm')

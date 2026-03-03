@@ -9,10 +9,7 @@ import {
   getInboundUploadDetail,
   getInboundUploads,
 } from '@/features/inbound/api/inbound.api';
-import type {
-  InboundUploadDetail,
-  InboundUploadSummary,
-} from '@/features/inbound/model/types';
+import type { InboundUploadDetail, InboundUploadSummary } from '@/features/inbound/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
 
 function errorMessageFromUnknown(error: unknown): string {
@@ -87,40 +84,54 @@ export function useInboundPage() {
   const [cancelling, setCancelling] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'' | 'UPLOADED' | 'CONFIRMED' | 'CANCELLED'>('');
   const [keyword, setKeyword] = useState('');
+  const [listPage, setListPage] = useState(1);
+  const [listPageSize, setListPageSize] = useState(20);
+  const [listTotal, setListTotal] = useState(0);
+  const [listTotalPages, setListTotalPages] = useState(1);
+  const [detailRowPage, setDetailRowPage] = useState(1);
+  const [detailRowPageSize, setDetailRowPageSize] = useState(50);
 
   const selectedInvalidCount = useMemo(
     () => selectedUpload?.rows.filter((row) => !row.isValid).length ?? 0,
     [selectedUpload],
   );
 
-  const filteredUploads = useMemo(() => {
-    const key = keyword.trim().toLowerCase();
-    return uploads.filter((upload) => {
-      const statusMatched = statusFilter ? upload.status === statusFilter : true;
-      const keyMatched = key
-        ? upload.fileName.toLowerCase().includes(key) || upload.id.toLowerCase().includes(key)
-        : true;
-      return statusMatched && keyMatched;
-    });
-  }, [keyword, statusFilter, uploads]);
+  const filteredUploads = uploads;
 
   const refreshUploads = useCallback(async () => {
     setLoadingList(true);
     try {
-      const data = await getInboundUploads();
-      setUploads(data);
+      const data = await getInboundUploads({
+        status: statusFilter,
+        keyword,
+        page: listPage,
+        pageSize: listPageSize,
+      });
+      setUploads(data.items);
+      setListTotal(data.total);
+      setListTotalPages(data.totalPages);
+      setListPage(data.page);
+      setListPageSize(data.pageSize);
     } catch (error) {
       showToast(errorMessageFromUnknown(error), 'error');
     } finally {
       setLoadingList(false);
     }
-  }, [showToast]);
+  }, [keyword, listPage, listPageSize, showToast, statusFilter]);
 
   const loadUploadDetail = useCallback(
-    async (uploadId: string) => {
+    async (
+      uploadId: string,
+      options?: { rowPage?: number; rowPageSize?: number },
+    ) => {
       setLoadingDetail(true);
       try {
-        const detail = await getInboundUploadDetail(uploadId);
+        const detail = await getInboundUploadDetail(uploadId, {
+          rowPage: options?.rowPage ?? detailRowPage,
+          rowPageSize: options?.rowPageSize ?? detailRowPageSize,
+        });
+        setDetailRowPage(detail.rowPage);
+        setDetailRowPageSize(detail.rowPageSize);
         setSelectedUpload({
           ...detail,
           rows: detail.rows.map((row) => ({
@@ -134,19 +145,23 @@ export function useInboundPage() {
         setLoadingDetail(false);
       }
     },
-    [showToast],
+    [detailRowPage, detailRowPageSize, showToast],
   );
 
   useEffect(() => {
     void refreshUploads();
   }, [refreshUploads]);
 
+  useEffect(() => {
+    setListPage(1);
+  }, [statusFilter, keyword, listPageSize]);
+
   async function uploadFile(file: File) {
     setUploading(true);
     try {
       const created = await createInboundUpload(file);
       await refreshUploads();
-      await loadUploadDetail(created.id);
+      await loadUploadDetail(created.id, { rowPage: 1 });
       if (created.invalidCount > 0) {
         showToast(
           `업로드 완료 (유효성 오류 ${created.invalidCount}건)`,
@@ -168,7 +183,7 @@ export function useInboundPage() {
     try {
       await confirmInboundUpload(selectedUpload.id);
       await refreshUploads();
-      await loadUploadDetail(selectedUpload.id);
+      await loadUploadDetail(selectedUpload.id, { rowPage: detailRowPage });
       showToast('입고 확정이 완료되었습니다.', 'success');
     } catch (error) {
       showToast(errorMessageFromUnknown(error), 'error');
@@ -183,7 +198,7 @@ export function useInboundPage() {
     try {
       await cancelInboundUpload(selectedUpload.id);
       await refreshUploads();
-      await loadUploadDetail(selectedUpload.id);
+      await loadUploadDetail(selectedUpload.id, { rowPage: detailRowPage });
       showToast('입고 업로드를 취소했습니다.', 'success');
     } catch (error) {
       showToast(errorMessageFromUnknown(error), 'error');
@@ -204,8 +219,18 @@ export function useInboundPage() {
     selectedInvalidCount,
     statusFilter,
     keyword,
+    listPage,
+    listPageSize,
+    listTotal,
+    listTotalPages,
+    detailRowPage,
+    detailRowPageSize,
     setStatusFilter,
     setKeyword,
+    setListPage,
+    setListPageSize,
+    setDetailRowPage,
+    setDetailRowPageSize,
     refreshUploads,
     loadUploadDetail,
     uploadFile,

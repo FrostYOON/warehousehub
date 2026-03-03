@@ -19,6 +19,36 @@ function formatQty(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
+type StockSortKey =
+  | 'warehouseType'
+  | 'itemCode'
+  | 'itemName'
+  | 'expiryDate'
+  | 'onHand'
+  | 'reserved'
+  | 'available'
+  | 'updatedAt';
+
+function parseSortKey(value: string | null): StockSortKey {
+  if (
+    value === 'warehouseType' ||
+    value === 'itemCode' ||
+    value === 'itemName' ||
+    value === 'expiryDate' ||
+    value === 'onHand' ||
+    value === 'reserved' ||
+    value === 'available' ||
+    value === 'updatedAt'
+  ) {
+    return value;
+  }
+  return 'itemCode';
+}
+
+function parseSortDir(value: string | null): 'asc' | 'desc' {
+  return value === 'desc' ? 'desc' : 'asc';
+}
+
 export default function StocksPage() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -51,6 +81,14 @@ export default function StocksPage() {
     if (normalized === 20 || normalized === 50 || normalized === 100) return normalized;
     return 50;
   }, [searchParams]);
+  const initialSortKey = useMemo<StockSortKey>(
+    () => parseSortKey(searchParams.get('sortKey')),
+    [searchParams],
+  );
+  const initialSortDir = useMemo<'asc' | 'desc'>(
+    () => parseSortDir(searchParams.get('sortDir')),
+    [searchParams],
+  );
   const {
     rows,
     loading,
@@ -91,6 +129,8 @@ export default function StocksPage() {
   const [shortageOnly, setShortageOnly] = useState(initialShortageOnly);
   const [isMobile, setIsMobile] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const [sortKey, setSortKey] = useState<StockSortKey>(initialSortKey);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialSortDir);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -139,6 +179,14 @@ export default function StocksPage() {
       params.set('pageSize', String(pageSize));
       changed = true;
     }
+    if (params.get('sortKey') !== sortKey) {
+      params.set('sortKey', sortKey);
+      changed = true;
+    }
+    if (params.get('sortDir') !== sortDir) {
+      params.set('sortDir', sortDir);
+      changed = true;
+    }
 
     if (shortageOnly) {
       if (params.get('shortageOnly') !== '1') {
@@ -163,6 +211,8 @@ export default function StocksPage() {
     router,
     searchParams,
     shortageOnly,
+    sortDir,
+    sortKey,
     storageType,
   ]);
 
@@ -191,6 +241,55 @@ export default function StocksPage() {
     () => (shortageOnly ? rows.filter((row) => row.onHand - row.reserved < 0) : rows),
     [rows, shortageOnly],
   );
+  const sortedRows = useMemo(() => {
+    const rowsCopy = [...displayedRows];
+    const factor = sortDir === 'asc' ? 1 : -1;
+    rowsCopy.sort((a, b) => {
+      const availableA = a.onHand - a.reserved;
+      const availableB = b.onHand - b.reserved;
+      switch (sortKey) {
+        case 'warehouseType':
+          return factor * a.warehouse.type.localeCompare(b.warehouse.type);
+        case 'itemCode':
+          return factor * a.lot.item.itemCode.localeCompare(b.lot.item.itemCode);
+        case 'itemName':
+          return factor * a.lot.item.itemName.localeCompare(b.lot.item.itemName);
+        case 'expiryDate': {
+          const ea = a.lot.expiryDate ?? '';
+          const eb = b.lot.expiryDate ?? '';
+          return factor * ea.localeCompare(eb);
+        }
+        case 'onHand':
+          return factor * (a.onHand - b.onHand);
+        case 'reserved':
+          return factor * (a.reserved - b.reserved);
+        case 'available':
+          return factor * (availableA - availableB);
+        case 'updatedAt':
+          return (
+            factor *
+            (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
+          );
+        default:
+          return 0;
+      }
+    });
+    return rowsCopy;
+  }, [displayedRows, sortDir, sortKey]);
+
+  function toggleSort(key: StockSortKey) {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDir('asc');
+  }
+
+  function sortMark(key: StockSortKey) {
+    if (sortKey !== key) return '↕';
+    return sortDir === 'asc' ? '↑' : '↓';
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -319,20 +418,52 @@ export default function StocksPage() {
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="text-slate-500">
               <tr>
-                <th className="px-2 py-2">창고</th>
-                <th className="px-2 py-2">품목코드</th>
-                <th className="px-2 py-2">품목명</th>
-                <th className="px-2 py-2">유통기한</th>
-                <th className="px-2 py-2">현재고</th>
-                <th className="px-2 py-2">예약</th>
-                <th className="px-2 py-2">가용</th>
-                <th className="px-2 py-2">수정시각</th>
+                <th className="px-2 py-2">
+                  <button type="button" onClick={() => toggleSort('warehouseType')} className="inline-flex items-center gap-1">
+                    창고 <span className="text-[10px] text-slate-400">{sortMark('warehouseType')}</span>
+                  </button>
+                </th>
+                <th className="px-2 py-2">
+                  <button type="button" onClick={() => toggleSort('itemCode')} className="inline-flex items-center gap-1">
+                    품목코드 <span className="text-[10px] text-slate-400">{sortMark('itemCode')}</span>
+                  </button>
+                </th>
+                <th className="px-2 py-2">
+                  <button type="button" onClick={() => toggleSort('itemName')} className="inline-flex items-center gap-1">
+                    품목명 <span className="text-[10px] text-slate-400">{sortMark('itemName')}</span>
+                  </button>
+                </th>
+                <th className="px-2 py-2">
+                  <button type="button" onClick={() => toggleSort('expiryDate')} className="inline-flex items-center gap-1">
+                    유통기한 <span className="text-[10px] text-slate-400">{sortMark('expiryDate')}</span>
+                  </button>
+                </th>
+                <th className="px-2 py-2">
+                  <button type="button" onClick={() => toggleSort('onHand')} className="inline-flex items-center gap-1">
+                    현재고 <span className="text-[10px] text-slate-400">{sortMark('onHand')}</span>
+                  </button>
+                </th>
+                <th className="px-2 py-2">
+                  <button type="button" onClick={() => toggleSort('reserved')} className="inline-flex items-center gap-1">
+                    예약 <span className="text-[10px] text-slate-400">{sortMark('reserved')}</span>
+                  </button>
+                </th>
+                <th className="px-2 py-2">
+                  <button type="button" onClick={() => toggleSort('available')} className="inline-flex items-center gap-1">
+                    가용 <span className="text-[10px] text-slate-400">{sortMark('available')}</span>
+                  </button>
+                </th>
+                <th className="px-2 py-2">
+                  <button type="button" onClick={() => toggleSort('updatedAt')} className="inline-flex items-center gap-1">
+                    수정시각 <span className="text-[10px] text-slate-400">{sortMark('updatedAt')}</span>
+                  </button>
+                </th>
                 {canEditStock && <th className="px-2 py-2">관리</th>}
               </tr>
             </thead>
             <tbody>
               {!loading &&
-                displayedRows.map((row) => {
+                sortedRows.map((row) => {
                   const available = row.onHand - row.reserved;
                   const isNegativeAvailable = available < 0;
                   return (

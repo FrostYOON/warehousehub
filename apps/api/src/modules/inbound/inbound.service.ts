@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { StorageType } from '@prisma/client';
+import { InboundUploadStatus, StorageType } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { getModuleLogger } from '../../common/logging/module-logger';
@@ -65,6 +65,16 @@ function normalizeRowKeys(
   return normalized;
 }
 
+function normalizeToUtcDay(value: Date): Date {
+  return new Date(
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+  );
+}
+
+function addUtcDays(value: Date, days: number): Date {
+  return new Date(value.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
 @Injectable()
 export class InboundService {
   constructor(private readonly prisma: PrismaService) {}
@@ -78,22 +88,17 @@ export class InboundService {
   }
 
   private parseExpiryDate(raw: unknown): Date | null {
-    if (raw === null || raw === undefined) {
-      throw new Error('ExpiryDate is required');
-    }
+    if (raw === null || raw === undefined) return null;
 
     // 1) "-" / 빈값 처리
     const s = toCellString(raw).trim();
-    if (!s || s === '-') throw new Error('ExpiryDate is required');
+    if (!s || s === '-' || s.toUpperCase() === 'N/A' || s === '없음') return null;
 
     // 2) Date 객체로 들어오는 케이스 (cellDates: true)
     if (raw instanceof Date) {
       if (Number.isNaN(raw.getTime()))
         throw new Error(`Invalid expiryDate: ${raw.toISOString()}`);
-      // 날짜만 쓰고 싶으면 UTC 00:00으로 정규화(선택)
-      return new Date(
-        Date.UTC(raw.getUTCFullYear(), raw.getUTCMonth(), raw.getUTCDate()),
-      );
+      return normalizeToUtcDay(raw);
     }
 
     // 3) 숫자(엑셀 시리얼 날짜)로 들어오는 케이스
@@ -102,9 +107,7 @@ export class InboundService {
       const js = new Date(Math.round((raw - 25569) * 86400 * 1000));
       if (Number.isNaN(js.getTime()))
         throw new Error(`Invalid expiryDate serial: ${raw}`);
-      return new Date(
-        Date.UTC(js.getUTCFullYear(), js.getUTCMonth(), js.getUTCDate()),
-      );
+      return normalizeToUtcDay(js);
     }
 
     // 4) 문자열: YYYY-MM-DD / YYYY.MM.DD / YYYY/MM/DD / YY.MM.DD 등 허용
@@ -118,7 +121,7 @@ export class InboundService {
       const d = new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`);
       if (Number.isNaN(d.getTime()))
         throw new Error(`Invalid expiryDate: ${s}`);
-      return d;
+      return normalizeToUtcDay(d);
     }
 
     const m = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -126,7 +129,7 @@ export class InboundService {
 
     const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00.000Z`);
     if (Number.isNaN(d.getTime())) throw new Error(`Invalid expiryDate: ${s}`);
-    return d;
+    return normalizeToUtcDay(d);
   }
 
   private parseQuantity(raw: unknown): number {
@@ -235,35 +238,90 @@ export class InboundService {
     };
   }
 
-  async getUpload(companyId: string, uploadId: string) {
+  async getUpload(
+    companyId: string,
+    uploadId: string,
+    query?: { rowPage?: number; rowPageSize?: number },
+  ) {
+    const rowPage = Math.max(1, query?.rowPage ?? 1);
+    const rowPageSize = Math.max(1, Math.min(500, query?.rowPageSize ?? 50));
+    const skip = (rowPage - 1) * rowPageSize;
+
     const upload = await this.prisma.inboundUpload.findFirst({
       where: { id: uploadId, companyId },
-      include: { rows: { orderBy: { createdAt: 'asc' } } },
+      select: {
+        id: true,
+        fileName: true,
+        status: true,
+        createdAt: true,
+        confirmedAt: true,
+      },
     });
 
     if (!upload) throw new NotFoundException('Upload not found');
+    const [rows, rowTotal] = await Promise.all([
+      this.prisma.inboundUploadRow.findMany({
+        where: { uploadId },
+        orderBy: { createdAt: 'asc' },
+        skip,
+        take: rowPageSize,
+      }),
+      this.prisma.inboundUploadRow.count({ where: { uploadId } }),
+    ]);
+
+    const rowTotalPages = Math.max(1, Math.ceil(rowTotal / rowPageSize));
     return {
       ...upload,
-      rows: upload.rows.map((row) => ({
+      rows: rows.map((row) => ({
         ...row,
         quantity: asNumber(row.quantity),
       })),
+      rowTotal,
+      rowPage,
+      rowPageSize,
+      rowTotalPages,
     };
   }
 
-  async listUploads(companyId: string) {
+  async listUploads(
+    companyId: string,
+    query?: {
+      status?: InboundUploadStatus;
+      keyword?: string;
+      page?: number;
+      pageSize?: number;
+    },
+  ) {
+    const page = Math.max(1, query?.page ?? 1);
+    const pageSize = Math.max(1, Math.min(100, query?.pageSize ?? 20));
+    const skip = (page - 1) * pageSize;
+    const keyword = query?.keyword?.trim();
+    const where: Prisma.InboundUploadWhereInput = {
+      companyId,
+      status: query?.status,
+      OR: keyword
+        ? [
+            { fileName: { contains: keyword, mode: 'insensitive' } },
+            { id: { contains: keyword, mode: 'insensitive' } },
+          ]
+        : undefined,
+    };
+
     const uploads = await this.prisma.inboundUpload.findMany({
-      where: { companyId },
+      where,
       include: {
         rows: {
           select: { isValid: true },
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      skip,
+      take: pageSize,
     });
+    const total = await this.prisma.inboundUpload.count({ where });
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-    return uploads.map((upload) => {
+    const items = uploads.map((upload) => {
       const invalidCount = upload.rows.filter((row) => !row.isValid).length;
       return {
         id: upload.id,
@@ -275,6 +333,13 @@ export class InboundService {
         rowCount: upload.rows.length,
       };
     });
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages,
+    };
   }
 
   async confirmUpload(params: {
@@ -373,22 +438,30 @@ export class InboundService {
             lot = existingLot;
           }
         } else {
-          lot = await tx.lot.upsert({
+          const normalizedExpiryDate = normalizeToUtcDay(row.expiryDate);
+          const existingLot = await tx.lot.findFirst({
             where: {
-              companyId_itemId_expiryDate: {
-                companyId,
-                itemId: item.id,
-                expiryDate: row.expiryDate,
-              },
-            },
-            update: {},
-            create: {
               companyId,
               itemId: item.id,
-              expiryDate: row.expiryDate,
+              expiryDate: {
+                gte: normalizedExpiryDate,
+                lt: addUtcDays(normalizedExpiryDate, 1),
+              },
             },
             select: { id: true },
           });
+          if (existingLot) {
+            lot = existingLot;
+          } else {
+            lot = await tx.lot.create({
+              data: {
+                companyId,
+                itemId: item.id,
+                expiryDate: normalizedExpiryDate,
+              },
+              select: { id: true },
+            });
+          }
         }
 
         // 3️⃣ Warehouse 찾기

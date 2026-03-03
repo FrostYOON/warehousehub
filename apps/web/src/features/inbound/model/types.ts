@@ -28,9 +28,21 @@ export type InboundUploadDetail = {
   createdAt: string;
   confirmedAt: string | null;
   rows: InboundUploadRow[];
+  rowTotal: number;
+  rowPage: number;
+  rowPageSize: number;
+  rowTotalPages: number;
 };
 
 export type InboundCreateUploadResponse = {
   id: string;
   invalidCount: number;
+};
+
+export type InboundUploadsListResponse = {
+  items: InboundUploadSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 };

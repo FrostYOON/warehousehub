@@ -24,8 +24,18 @@ export default function InboundPage() {
     selectedInvalidCount,
     statusFilter,
     keyword,
+    listPage,
+    listPageSize,
+    listTotal,
+    listTotalPages,
+    detailRowPage,
+    detailRowPageSize,
     setStatusFilter,
     setKeyword,
+    setListPage,
+    setListPageSize,
+    setDetailRowPage,
+    setDetailRowPageSize,
     loadUploadDetail,
     uploadFile,
     confirmSelectedUpload,
@@ -76,7 +86,7 @@ export default function InboundPage() {
         <p className="mt-2 text-sm text-slate-600">
           엑셀 파일을 업로드한 뒤 검증 결과를 확인하고 입고 확정을 진행합니다.
         </p>
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="mt-4 space-y-2">
           <input
             type="file"
             accept=".xlsx,.xls"
@@ -90,9 +100,11 @@ export default function InboundPage() {
             }}
             className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-slate-300 file:bg-white file:px-3 file:py-2 file:text-sm file:hover:bg-slate-50"
           />
-          <span className="text-xs text-slate-500">
-            {uploading ? '업로드 중...' : '지원 형식: .xlsx, .xls'}
-          </span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span>{uploading ? '업로드 중...' : '지원 형식: .xlsx, .xls'}</span>
+            <span className="hidden sm:inline">/</span>
+            <span>ExpiryDate가 없으면 `-`, 빈값, `N/A` 입력 가능</span>
+          </div>
         </div>
       </section>
 
@@ -119,6 +131,26 @@ export default function InboundPage() {
             placeholder="파일명 또는 업로드 ID 검색"
             className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
           />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+          <span>
+            총 {listTotal}건 / {listPage} / {listTotalPages} 페이지
+          </span>
+          <div className="flex items-center gap-2">
+            <span>페이지당</span>
+            <select
+              value={listPageSize}
+              onChange={(e) => {
+                setListPageSize(Number(e.target.value));
+                setListPage(1);
+              }}
+              className="h-8 rounded border border-slate-300 px-2 text-xs"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
         </div>
         {loadingList ? (
           <p className="mt-3 text-sm text-slate-600">목록을 불러오는 중...</p>
@@ -152,7 +184,10 @@ export default function InboundPage() {
                     <td className="px-2 py-2">
                       <button
                         type="button"
-                        onClick={() => void loadUploadDetail(upload.id)}
+                        onClick={() => {
+                          setDetailRowPage(1);
+                          void loadUploadDetail(upload.id, { rowPage: 1 });
+                        }}
                         className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
                       >
                         보기
@@ -164,6 +199,29 @@ export default function InboundPage() {
             </table>
           </div>
         )}
+        {!loadingList && listTotalPages > 1 ? (
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setListPage((prev) => Math.max(1, prev - 1))}
+              disabled={listPage <= 1}
+              className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-50"
+            >
+              이전
+            </button>
+            <span className="text-xs text-slate-600">
+              {listPage} / {listTotalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setListPage((prev) => Math.min(listTotalPages, prev + 1))}
+              disabled={listPage >= listTotalPages}
+              className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100 disabled:opacity-50"
+            >
+              다음
+            </button>
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -255,6 +313,59 @@ export default function InboundPage() {
                 ))}
               </tbody>
             </table>
+            {selectedUpload.rowTotalPages > 1 ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                <div className="flex items-center gap-2">
+                  <span>페이지당</span>
+                  <select
+                    value={detailRowPageSize}
+                    onChange={(e) => {
+                      const nextSize = Number(e.target.value);
+                      setDetailRowPageSize(nextSize);
+                      setDetailRowPage(1);
+                      void loadUploadDetail(selectedUpload.id, {
+                        rowPage: 1,
+                        rowPageSize: nextSize,
+                      });
+                    }}
+                    className="h-8 rounded border border-slate-300 px-2 text-xs"
+                  >
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = Math.max(1, detailRowPage - 1);
+                      setDetailRowPage(next);
+                      void loadUploadDetail(selectedUpload.id, { rowPage: next });
+                    }}
+                    disabled={detailRowPage <= 1}
+                    className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100 disabled:opacity-50"
+                  >
+                    이전
+                  </button>
+                  <span>
+                    {detailRowPage} / {selectedUpload.rowTotalPages} (총 {selectedUpload.rowTotal}건)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = Math.min(selectedUpload.rowTotalPages, detailRowPage + 1);
+                      setDetailRowPage(next);
+                      void loadUploadDetail(selectedUpload.id, { rowPage: next });
+                    }}
+                    disabled={detailRowPage >= selectedUpload.rowTotalPages}
+                    className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100 disabled:opacity-50"
+                  >
+                    다음
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         )}
       </section>

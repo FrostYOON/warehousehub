@@ -157,10 +157,18 @@ export class StocksService {
       where: this.stockWhere(params),
       orderBy: [
         {
-          warehouse: { type: 'asc' },
+          lot: {
+            item: { itemCode: 'asc' },
+          },
         },
         {
           lot: { expiryDate: 'asc' },
+        },
+        {
+          warehouse: { type: 'asc' },
+        },
+        {
+          warehouse: { name: 'asc' },
         },
       ],
       skip: params.skip,

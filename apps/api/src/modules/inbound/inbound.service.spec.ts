@@ -23,6 +23,7 @@ describe('InboundService', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         InboundService,
@@ -149,6 +150,58 @@ describe('InboundService', () => {
       expect(prismaMock.stock.upsert).toHaveBeenCalledTimes(1);
       expect(prismaMock.inboundUpload.update).not.toHaveBeenCalled();
       expect(result).toEqual({ ok: true });
+    });
+
+    it('merges same expiry date lots by day and creates new lot for different date', async () => {
+      prismaMock.inboundUpload.findFirst.mockResolvedValueOnce({
+        id: 'upload-1',
+        status: 'UPLOADED',
+        rows: [
+          {
+            itemCode: 'ITEM-1',
+            itemName: 'Item One',
+            storageType: 'DRY',
+            quantity: 5,
+            expiryDate: new Date('2026-03-10T00:00:00.000Z'),
+            isValid: true,
+          },
+          {
+            itemCode: 'ITEM-1',
+            itemName: 'Item One',
+            storageType: 'DRY',
+            quantity: 7,
+            expiryDate: new Date('2026-03-11T00:00:00.000Z'),
+            isValid: true,
+          },
+        ],
+      });
+      prismaMock.inboundUpload.updateMany.mockResolvedValueOnce({ count: 1 });
+      prismaMock.inventoryTx.create.mockResolvedValueOnce({ id: 'tx-1' });
+      prismaMock.item.upsert
+        .mockResolvedValueOnce({ id: 'item-1' })
+        .mockResolvedValueOnce({ id: 'item-1' });
+      prismaMock.lot.findFirst
+        .mockResolvedValueOnce({ id: 'lot-existing-same-day' }) // first row date exists
+        .mockResolvedValueOnce(null); // second row date not exists
+      prismaMock.lot.create.mockResolvedValueOnce({ id: 'lot-new-date' });
+      prismaMock.warehouse.findFirst
+        .mockResolvedValueOnce({ id: 'wh-1' })
+        .mockResolvedValueOnce({ id: 'wh-1' });
+      prismaMock.stock.upsert.mockResolvedValue({});
+      prismaMock.inventoryTxLine.create.mockResolvedValue({});
+      prismaMock.$transaction.mockImplementationOnce(
+        async (cb: (tx: typeof prismaMock) => Promise<{ ok: true }>) =>
+          cb(prismaMock),
+      );
+
+      await service.confirmUpload({
+        companyId: 'company-1',
+        uploadId: 'upload-1',
+        actorUserId: 'user-1',
+      });
+
+      expect(prismaMock.stock.upsert).toHaveBeenCalledTimes(2);
+      expect(prismaMock.lot.create).toHaveBeenCalledTimes(1);
     });
 
     it('throws when upload is already claimed by another request', async () => {
