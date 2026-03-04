@@ -6,7 +6,8 @@ import { useAuthSession } from '@/features/auth';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { useStocksPageWithOptions } from '@/features/stocks/hooks/use-stocks-page';
 import type { ItemAnalyticsRange, StockRow, StorageType } from '@/features/stocks/model/types';
-import { ActionButton } from '@/shared/ui/common';
+import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
+import { ActionButton, SortableHeader } from '@/shared/ui/common';
 import { useToast } from '@/shared/ui/toast/toast-provider';
 
 function parseStorageType(value: string | null): '' | StorageType {
@@ -14,9 +15,9 @@ function parseStorageType(value: string | null): '' | StorageType {
   return '';
 }
 
-function formatQty(value: number): string {
-  const rounded = Math.round(value * 10) / 10;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+function warehouseDisplay(type: string, name: string): string {
+  if (type === 'FRZ') return 'FRZ';
+  return `${type} (${name})`;
 }
 
 type StockSortKey =
@@ -286,10 +287,6 @@ export default function StocksPage() {
     setSortDir('asc');
   }
 
-  function sortMark(key: StockSortKey) {
-    if (sortKey !== key) return '↕';
-    return sortDir === 'asc' ? '↑' : '↓';
-  }
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -361,7 +358,11 @@ export default function StocksPage() {
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[200px_1fr_auto_auto]">
           <select
             value={storageType}
-            onChange={(e) => setStorageType(e.target.value as '' | 'DRY' | 'COOL' | 'FRZ')}
+            onChange={(e) => {
+              const next = e.target.value as '' | 'DRY' | 'COOL' | 'FRZ';
+              setStorageType(next);
+              void loadStocks({ nextPage: 1, storageType: next });
+            }}
             className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
           >
             <option value="">전체 창고</option>
@@ -417,50 +418,74 @@ export default function StocksPage() {
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="text-slate-500">
-              <tr>
-                <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort('warehouseType')} className="inline-flex items-center gap-1">
-                    창고 <span className="text-[10px] text-slate-400">{sortMark('warehouseType')}</span>
-                  </button>
-                </th>
-                <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort('itemCode')} className="inline-flex items-center gap-1">
-                    품목코드 <span className="text-[10px] text-slate-400">{sortMark('itemCode')}</span>
-                  </button>
-                </th>
-                <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort('itemName')} className="inline-flex items-center gap-1">
-                    품목명 <span className="text-[10px] text-slate-400">{sortMark('itemName')}</span>
-                  </button>
-                </th>
-                <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort('expiryDate')} className="inline-flex items-center gap-1">
-                    유통기한 <span className="text-[10px] text-slate-400">{sortMark('expiryDate')}</span>
-                  </button>
-                </th>
-                <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort('onHand')} className="inline-flex items-center gap-1">
-                    현재고 <span className="text-[10px] text-slate-400">{sortMark('onHand')}</span>
-                  </button>
-                </th>
-                <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort('reserved')} className="inline-flex items-center gap-1">
-                    예약 <span className="text-[10px] text-slate-400">{sortMark('reserved')}</span>
-                  </button>
-                </th>
-                <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort('available')} className="inline-flex items-center gap-1">
-                    가용 <span className="text-[10px] text-slate-400">{sortMark('available')}</span>
-                  </button>
-                </th>
-                <th className="px-2 py-2">
-                  <button type="button" onClick={() => toggleSort('updatedAt')} className="inline-flex items-center gap-1">
-                    수정시각 <span className="text-[10px] text-slate-400">{sortMark('updatedAt')}</span>
-                  </button>
-                </th>
-                {canEditStock && <th className="px-2 py-2">관리</th>}
-              </tr>
-            </thead>
+                <tr>
+                  <SortableHeader
+                    label="창고"
+                    sortKey="warehouseType"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleSort(k as StockSortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="품목코드"
+                    sortKey="itemCode"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleSort(k as StockSortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="품목명"
+                    sortKey="itemName"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleSort(k as StockSortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="유통기한"
+                    sortKey="expiryDate"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleSort(k as StockSortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="현재고"
+                    sortKey="onHand"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleSort(k as StockSortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="예약"
+                    sortKey="reserved"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleSort(k as StockSortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="가용"
+                    sortKey="available"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleSort(k as StockSortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="수정시각"
+                    sortKey="updatedAt"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleSort(k as StockSortKey)}
+                    className="px-2 py-2"
+                  />
+                  {canEditStock && <th className="px-2 py-2">관리</th>}
+                </tr>
+              </thead>
             <tbody>
               {!loading &&
                 sortedRows.map((row) => {
@@ -469,7 +494,7 @@ export default function StocksPage() {
                   return (
                     <tr key={row.id} className="border-t border-slate-100">
                       <td className="px-2 py-2">
-                        {row.warehouse.type} ({row.warehouse.name})
+                        {warehouseDisplay(row.warehouse.type, row.warehouse.name)}
                       </td>
                       <td className="px-2 py-2">{row.lot.item.itemCode}</td>
                       <td className="px-2 py-2">{row.lot.item.itemName}</td>
@@ -489,7 +514,7 @@ export default function StocksPage() {
                             className="h-8 w-24 rounded border border-slate-300 px-2 text-xs"
                           />
                         ) : (
-                          formatQty(row.onHand)
+                          formatDecimalForDisplay(row.onHand)
                         )}
                       </td>
                       <td className="px-2 py-2">
@@ -503,7 +528,7 @@ export default function StocksPage() {
                             className="h-8 w-24 rounded border border-slate-300 px-2 text-xs"
                           />
                         ) : (
-                          formatQty(row.reserved)
+                          formatDecimalForDisplay(row.reserved)
                         )}
                       </td>
                       <td className="px-2 py-2">
@@ -514,7 +539,7 @@ export default function StocksPage() {
                               : ''
                           }
                         >
-                          {formatQty(available)}
+                          {formatDecimalForDisplay(available)}
                         </span>
                         {isNegativeAvailable ? (
                           <span className="ml-1 rounded border border-red-200 bg-red-50 px-1 py-0.5 text-[10px] text-red-700">
@@ -710,13 +735,13 @@ export default function StocksPage() {
               <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs text-slate-500">{rangeLabel[analysisTrend.range]} 출고량</p>
                 <p className="mt-1 text-xl font-semibold text-slate-800">
-                  {formatQty(analysisTrend.totals.outboundQty)}
+                  {formatDecimalForDisplay(analysisTrend.totals.outboundQty)}
                 </p>
               </article>
               <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs text-slate-500">{rangeLabel[analysisTrend.range]} 리턴량</p>
                 <p className="mt-1 text-xl font-semibold text-slate-800">
-                  {formatQty(analysisTrend.totals.returnQty)}
+                  {formatDecimalForDisplay(analysisTrend.totals.returnQty)}
                 </p>
               </article>
               <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">

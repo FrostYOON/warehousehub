@@ -6,7 +6,8 @@ import { useAuthSession } from '@/features/auth';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { useReturnsPage } from '@/features/returns/hooks/use-returns-page';
 import type { StorageType } from '@/features/returns/model/types';
-import { ActionButton, StatusBadge } from '@/shared/ui/common';
+import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
+import { ActionButton, SortableHeader, StatusBadge } from '@/shared/ui/common';
 
 export default function ReturnsPage() {
   const searchParams = useSearchParams();
@@ -16,6 +17,10 @@ export default function ReturnsPage() {
     items,
     receipts,
     filteredReceipts,
+    sortedFilteredReceipts,
+    returnSortKey,
+    returnSortDir,
+    toggleReturnSort,
     selected,
     loadingList,
     loadingDetail,
@@ -33,9 +38,13 @@ export default function ReturnsPage() {
     canEditSelectedReceipt,
     decideDisabledReason,
     processDisabledReason,
+    refreshList,
     loadDetail,
     setDecisionMap,
     setLineQtyMap,
+    lineExpiryMap,
+    setLineExpiryMap,
+    updateLineExpiry,
     toggleProcessLine,
     createReceipt,
     updateLineQty,
@@ -109,9 +118,9 @@ export default function ReturnsPage() {
   }, [searchParams]);
 
   const displayedReceipts = useMemo(() => {
-    if (presetStatuses.length === 0 || statusFilter) return filteredReceipts;
+    if (presetStatuses.length === 0 || statusFilter) return sortedFilteredReceipts;
     const scope = new Set(presetStatuses);
-    return receipts
+    const base = receipts
       .filter((receipt) => scope.has(receipt.status))
       .filter((receipt) => {
         const key = keyword.trim().toLowerCase();
@@ -124,7 +133,33 @@ export default function ReturnsPage() {
           : true;
         return keyMatched;
       });
-  }, [filteredReceipts, keyword, presetStatuses, receipts, statusFilter]);
+    const factor = returnSortDir === 'asc' ? 1 : -1;
+    return [...base].sort((a, b) => {
+      switch (returnSortKey) {
+        case 'receiptNo':
+          return factor * ((a.receiptNo ?? 0) - (b.receiptNo ?? 0));
+        case 'status':
+          return factor * a.status.localeCompare(b.status);
+        case 'receivedAt':
+          return factor * (new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+        case 'customer':
+          return factor * customerDisplayName(a.customer).localeCompare(customerDisplayName(b.customer));
+        case 'lineCount':
+          return factor * (a.lines.length - b.lines.length);
+        default:
+          return 0;
+      }
+    });
+  }, [
+    customerDisplayName,
+    keyword,
+    presetStatuses,
+    receipts,
+    returnSortDir,
+    returnSortKey,
+    sortedFilteredReceipts,
+    statusFilter,
+  ]);
 
   useEffect(() => {
     const status = searchParams.get('status');
@@ -184,7 +219,7 @@ export default function ReturnsPage() {
         <p className="mt-2 text-xs text-slate-500">
           반품 접수도 품목을 모달에서 여러 개 선택해 한 번에 생성할 수 있습니다.
         </p>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr_auto]">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -199,9 +234,19 @@ export default function ReturnsPage() {
           <input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void refreshList();
+            }}
             placeholder="접수번호 또는 고객사명 검색"
             className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
           />
+          <ActionButton
+            onClick={() => void refreshList()}
+            disabled={loadingList}
+            className="h-10 rounded-lg border border-slate-300 px-4 text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loadingList ? '조회 중...' : '조회'}
+          </ActionButton>
         </div>
         {loadingList ? (
           <p className="mt-3 text-sm text-slate-600">목록을 불러오는 중...</p>
@@ -212,11 +257,46 @@ export default function ReturnsPage() {
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="text-slate-500">
                 <tr>
-                  <th className="px-2 py-2">접수번호</th>
-                  <th className="px-2 py-2">상태</th>
-                  <th className="px-2 py-2">고객사</th>
-                  <th className="px-2 py-2">접수일</th>
-                  <th className="px-2 py-2">라인 수</th>
+                  <SortableHeader
+                    label="접수번호"
+                    sortKey="receiptNo"
+                    currentSortKey={returnSortKey}
+                    currentSortDir={returnSortDir}
+                    onSort={toggleReturnSort}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="상태"
+                    sortKey="status"
+                    currentSortKey={returnSortKey}
+                    currentSortDir={returnSortDir}
+                    onSort={toggleReturnSort}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="고객사"
+                    sortKey="customer"
+                    currentSortKey={returnSortKey}
+                    currentSortDir={returnSortDir}
+                    onSort={toggleReturnSort}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="접수일"
+                    sortKey="receivedAt"
+                    currentSortKey={returnSortKey}
+                    currentSortDir={returnSortDir}
+                    onSort={toggleReturnSort}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="라인 수"
+                    sortKey="lineCount"
+                    currentSortKey={returnSortKey}
+                    currentSortDir={returnSortDir}
+                    onSort={toggleReturnSort}
+                    className="px-2 py-2"
+                  />
                   <th className="px-2 py-2">상세</th>
                 </tr>
               </thead>
@@ -336,7 +416,7 @@ export default function ReturnsPage() {
                           type="number"
                           min="0.001"
                           step="0.001"
-                          value={createItemQty[item.id] ?? ''}
+                          value={createItemQty[item.id] ?? '0'}
                           onChange={(e) => setCreateQty(item.id, e.target.value)}
                           disabled={!createItemChecked[item.id]}
                           className="h-8 w-24 rounded-md border border-slate-300 px-2 text-xs"
@@ -433,11 +513,34 @@ export default function ReturnsPage() {
                       <td className="px-2 py-2">{line.item?.itemName ?? '-'}</td>
                       <td className="px-2 py-2">{line.storageType}</td>
                       <td className="px-2 py-2">
-                        {line.expiryDate
-                          ? new Date(line.expiryDate).toLocaleDateString()
-                          : '-'}
+                        {canEditSelectedReceipt ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              value={lineExpiryMap[line.id] ?? ''}
+                              onChange={(e) =>
+                                setLineExpiryMap((prev) => ({
+                                  ...prev,
+                                  [line.id]: e.target.value,
+                                }))
+                              }
+                              className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                            />
+                            <ActionButton
+                              onClick={() => void updateLineExpiry(line.id)}
+                              disabled={actionLoading !== null}
+                              className="h-8 rounded-md border border-slate-300 px-2 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              수정
+                            </ActionButton>
+                          </div>
+                        ) : line.expiryDate ? (
+                          new Date(line.expiryDate).toLocaleDateString()
+                        ) : (
+                          '-'
+                        )}
                       </td>
-                      <td className="px-2 py-2">{String(line.qty)}</td>
+                      <td className="px-2 py-2">{formatDecimalForDisplay(line.qty)}</td>
                       <td className="px-2 py-2">
                         {canDecide ? (
                           <select
@@ -453,6 +556,8 @@ export default function ReturnsPage() {
                             <option value="RESTOCK">RESTOCK</option>
                             <option value="DISCARD">DISCARD</option>
                           </select>
+                        ) : selected?.status === 'DECIDED' && line.decision ? (
+                          <span>확정</span>
                         ) : (
                           <span>{line.decision ?? '-'}</span>
                         )}

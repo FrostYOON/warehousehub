@@ -42,10 +42,12 @@ export async function getCustomers(): Promise<CustomerOption[]> {
 export async function createReturn(
   payload: {
     customerId?: string;
+    outboundOrderId?: string;
     receivedAt?: string;
     memo?: string;
     lines: Array<{
       itemId: string;
+      outboundLineId?: string;
       storageType: StorageType;
       expiryDate?: string | null;
       qty: number;

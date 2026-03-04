@@ -6,7 +6,8 @@ import { useAuthSession } from '@/features/auth';
 import { canAccessInbound } from '@/features/auth/model/role-policy';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { useInboundPage } from '@/features/inbound/hooks/use-inbound-page';
-import { ActionButton, StatusBadge } from '@/shared/ui/common';
+import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
+import { ActionButton, SortableHeader, StatusBadge } from '@/shared/ui/common';
 
 export default function InboundPage() {
   const router = useRouter();
@@ -34,6 +35,9 @@ export default function InboundPage() {
     setKeyword,
     setListPage,
     setListPageSize,
+    sortKey,
+    sortDir,
+    toggleInboundSort,
     setDetailRowPage,
     setDetailRowPageSize,
     loadUploadDetail,
@@ -161,11 +165,46 @@ export default function InboundPage() {
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="text-slate-500">
                 <tr>
-                  <th className="px-2 py-2">파일명</th>
-                  <th className="px-2 py-2">상태</th>
-                  <th className="px-2 py-2">행 수</th>
-                  <th className="px-2 py-2">오류</th>
-                  <th className="px-2 py-2">업로드 시각</th>
+                  <SortableHeader
+                    label="파일명"
+                    sortKey="fileName"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleInboundSort(k as typeof sortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="상태"
+                    sortKey="status"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleInboundSort(k as typeof sortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="행 수"
+                    sortKey="rowCount"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleInboundSort(k as typeof sortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="오류"
+                    sortKey="invalidCount"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleInboundSort(k as typeof sortKey)}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="업로드 시각"
+                    sortKey="createdAt"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={(k) => toggleInboundSort(k as typeof sortKey)}
+                    className="px-2 py-2"
+                  />
                   <th className="px-2 py-2">상세</th>
                 </tr>
               </thead>
@@ -293,7 +332,7 @@ export default function InboundPage() {
                     <td className="px-2 py-2">{row.itemCode}</td>
                     <td className="px-2 py-2">{row.itemName}</td>
                     <td className="px-2 py-2">{row.storageType}</td>
-                    <td className="px-2 py-2">{row.quantity}</td>
+                    <td className="px-2 py-2">{formatDecimalForDisplay(row.quantity)}</td>
                     <td className="px-2 py-2">
                       {row.expiryDate
                         ? new Date(row.expiryDate).toLocaleDateString()

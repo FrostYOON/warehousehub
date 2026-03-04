@@ -8,6 +8,7 @@ export type ReturnLineDecision = 'RESTOCK' | 'DISCARD';
 export type ReturnReceiptLine = {
   id: string;
   itemId: string;
+  outboundLineId?: string | null;
   item: {
     id: string;
     itemCode: string;
@@ -24,6 +25,7 @@ export type ReturnReceiptLine = {
 export type ReturnReceipt = {
   id: string;
   receiptNo?: number;
+  outboundOrderId?: string | null;
   status: ReturnStatus;
   receivedAt: string;
   memo: string | null;

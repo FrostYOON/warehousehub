@@ -97,9 +97,10 @@ export function useStocksPageWithOptions(options?: {
     nextPage?: number;
     nextPageSize?: number;
     append?: boolean;
+    storageType?: StorageType | '';
   }) => {
     await fetchStocks({
-      storageType: storageType || undefined,
+      storageType: (params?.storageType ?? storageType) || undefined,
       itemCode: itemCode || undefined,
       page: params?.nextPage ?? 1,
       pageSize: params?.nextPageSize ?? pageSize,

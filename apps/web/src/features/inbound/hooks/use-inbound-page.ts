@@ -86,6 +86,10 @@ export function useInboundPage() {
   const [keyword, setKeyword] = useState('');
   const [listPage, setListPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(20);
+  const [sortKey, setSortKey] = useState<
+    'fileName' | 'status' | 'rowCount' | 'invalidCount' | 'createdAt'
+  >('createdAt');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [listTotal, setListTotal] = useState(0);
   const [listTotalPages, setListTotalPages] = useState(1);
   const [detailRowPage, setDetailRowPage] = useState(1);
@@ -96,7 +100,38 @@ export function useInboundPage() {
     [selectedUpload],
   );
 
-  const filteredUploads = uploads;
+  const filteredUploads = useMemo(() => {
+    const list = [...uploads];
+    const factor = sortDir === 'asc' ? 1 : -1;
+    list.sort((a, b) => {
+      switch (sortKey) {
+        case 'fileName':
+          return factor * (a.fileName?.localeCompare(b.fileName ?? '') ?? 0);
+        case 'status':
+          return factor * (a.status?.localeCompare(b.status ?? '') ?? 0);
+        case 'rowCount':
+          return factor * ((a.rowCount ?? 0) - (b.rowCount ?? 0));
+        case 'invalidCount':
+          return factor * ((a.invalidCount ?? 0) - (b.invalidCount ?? 0));
+        case 'createdAt':
+          return factor * (
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        default:
+          return 0;
+      }
+    });
+    return list;
+  }, [uploads, sortKey, sortDir]);
+
+  function toggleInboundSort(key: typeof sortKey) {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDir('desc');
+  }
 
   const refreshUploads = useCallback(async () => {
     setLoadingList(true);
@@ -229,6 +264,9 @@ export function useInboundPage() {
     setKeyword,
     setListPage,
     setListPageSize,
+    sortKey,
+    sortDir,
+    toggleInboundSort,
     setDetailRowPage,
     setDetailRowPageSize,
     refreshUploads,

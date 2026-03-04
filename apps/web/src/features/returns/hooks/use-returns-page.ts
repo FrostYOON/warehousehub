@@ -19,6 +19,7 @@ import type {
 } from '@/features/returns/model/types';
 import type { UserRole } from '@/features/auth/model/types';
 import { getStocks } from '@/features/stocks/api/stocks.api';
+import type { StockRow } from '@/features/stocks/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
 
 function errorMessageFromUnknown(error: unknown): string {
@@ -45,6 +46,7 @@ export function useReturnsPage(role?: UserRole) {
   const [decisionMap, setDecisionMap] = useState<Record<string, ReturnLineDecision>>({});
   const [processLineIds, setProcessLineIds] = useState<string[]>([]);
   const [lineQtyMap, setLineQtyMap] = useState<Record<string, string>>({});
+  const [lineExpiryMap, setLineExpiryMap] = useState<Record<string, string>>({});
   const [statusFilter, setStatusFilter] = useState('');
   const [keyword, setKeyword] = useState('');
   const [newCustomerId, setNewCustomerId] = useState('');
@@ -54,6 +56,10 @@ export function useReturnsPage(role?: UserRole) {
     Record<string, StorageType>
   >({});
   const [createItemQty, setCreateItemQty] = useState<Record<string, string>>({});
+  const [returnSortKey, setReturnSortKey] = useState<
+    'receiptNo' | 'status' | 'receivedAt' | 'customer' | 'lineCount'
+  >('receivedAt');
+  const [returnSortDir, setReturnSortDir] = useState<'asc' | 'desc'>('desc');
   const [createItemExpiry, setCreateItemExpiry] = useState<Record<string, string>>({});
 
   const refreshList = useCallback(async () => {
@@ -70,10 +76,10 @@ export function useReturnsPage(role?: UserRole) {
 
   const loadFormMeta = useCallback(async () => {
     try {
-      const [customersData, stocks] = await Promise.all([getCustomers(), getStocks()]);
+      const [customersData, stocksRes] = await Promise.all([getCustomers(), getStocks()]);
       setCustomers(customersData);
       const uniqueItems = new Map<string, { id: string; itemCode: string; itemName: string }>();
-      stocks.forEach((row) => {
+      stocksRes.items.forEach((row: StockRow) => {
         uniqueItems.set(row.lot.item.id, {
           id: row.lot.item.id,
           itemCode: row.lot.item.itemCode,
@@ -103,6 +109,14 @@ export function useReturnsPage(role?: UserRole) {
         setLineQtyMap(
           Object.fromEntries(detail.lines.map((line) => [line.id, String(line.qty)])),
         );
+        setLineExpiryMap(
+          Object.fromEntries(
+            detail.lines.map((line) => [
+              line.id,
+              line.expiryDate ? new Date(line.expiryDate).toISOString().slice(0, 10) : '',
+            ]),
+          ),
+        );
       } catch (error) {
         showToast(errorMessageFromUnknown(error), 'error');
       } finally {
@@ -127,6 +141,21 @@ export function useReturnsPage(role?: UserRole) {
 
   const canDecide = canManageReturns && selected?.status === 'RECEIVED';
   const canProcess = canManageReturns && selected?.status === 'DECIDED';
+
+  const customerDisplayName = (c?: { name?: string; customerName?: string } | null) =>
+    c?.name ?? c?.customerName ?? '-';
+
+  function toggleReturnSort(key: string) {
+    if (returnSortKey === key) {
+      setReturnSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setReturnSortKey(
+      key as 'receiptNo' | 'status' | 'receivedAt' | 'customer' | 'lineCount',
+    );
+    setReturnSortDir('asc');
+  }
+
   const filteredReceipts = receipts.filter((receipt) => {
     const statusMatched = statusFilter ? receipt.status === statusFilter : true;
     const key = keyword.trim().toLowerCase();
@@ -139,6 +168,28 @@ export function useReturnsPage(role?: UserRole) {
       : true;
     return statusMatched && keyMatched;
   });
+
+  const sortedFilteredReceipts = useMemo(() => {
+    const list = [...filteredReceipts];
+    const factor = returnSortDir === 'asc' ? 1 : -1;
+    list.sort((a, b) => {
+      switch (returnSortKey) {
+        case 'receiptNo':
+          return factor * ((a.receiptNo ?? 0) - (b.receiptNo ?? 0));
+        case 'status':
+          return factor * (a.status.localeCompare(b.status));
+        case 'receivedAt':
+          return factor * (new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+        case 'customer':
+          return factor * customerDisplayName(a.customer).localeCompare(customerDisplayName(b.customer));
+        case 'lineCount':
+          return factor * (a.lines.length - b.lines.length);
+        default:
+          return 0;
+      }
+    });
+    return list;
+  }, [filteredReceipts, returnSortKey, returnSortDir]);
 
   function decideDisabledReason(): string | undefined {
     if (!selected) return '상세를 선택해주세요.';
@@ -203,7 +254,13 @@ export function useReturnsPage(role?: UserRole) {
   }
 
   function toggleCreateItem(itemId: string) {
-    setCreateItemChecked((prev) => ({ ...prev, [itemId]: !prev[itemId] }));
+    setCreateItemChecked((prev) => {
+      const next = { ...prev, [itemId]: !prev[itemId] };
+      if (next[itemId] && !(itemId in createItemQty)) {
+        setCreateItemQty((q) => ({ ...q, [itemId]: '0' }));
+      }
+      return next;
+    });
   }
 
   function setCreateStorageType(itemId: string, storageType: StorageType) {
@@ -251,6 +308,30 @@ export function useReturnsPage(role?: UserRole) {
         lines: [{ id: lineId, qty }],
       });
       showToast('라인 수량을 수정했습니다.', 'success');
+      await refreshList();
+      await loadDetail(selected.id);
+    } catch (error) {
+      showToast(errorMessageFromUnknown(error), 'error');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function updateLineExpiry(lineId: string) {
+    if (!selected || !canEditSelectedReceipt) return;
+    const raw = lineExpiryMap[lineId]?.trim();
+    setActionLoading('updateExpiry');
+    try {
+      await updateReturn(selected.id, {
+        lines: [
+          {
+            id: lineId,
+            expiryDate: raw || undefined,
+            clearExpiryDate: !raw,
+          },
+        ],
+      });
+      showToast('유통기한을 수정했습니다.', 'success');
       await refreshList();
       await loadDetail(selected.id);
     } catch (error) {
@@ -341,6 +422,10 @@ export function useReturnsPage(role?: UserRole) {
     items,
     receipts,
     filteredReceipts,
+    sortedFilteredReceipts,
+    returnSortKey,
+    returnSortDir,
+    toggleReturnSort,
     selected,
     loadingList,
     loadingDetail,
@@ -372,12 +457,16 @@ export function useReturnsPage(role?: UserRole) {
     canEditSelectedReceipt,
     decideDisabledReason,
     processDisabledReason,
+    refreshList,
     loadDetail,
     setDecisionMap,
     setLineQtyMap,
+    lineExpiryMap,
+    setLineExpiryMap,
     toggleProcessLine,
     createReceipt,
     updateLineQty,
+    updateLineExpiry,
     removeLine,
     cancelReceipt,
     submitDecide,
