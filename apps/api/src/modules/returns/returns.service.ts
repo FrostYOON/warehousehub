@@ -28,6 +28,15 @@ export class ReturnsService {
       throw new BadRequestException('lines is required');
     }
 
+    // outboundOrderId가 오면 회사 소속 출고 주문인지 검증
+    if (dto.outboundOrderId) {
+      const order = await this.prisma.outboundOrder.findFirst({
+        where: { id: dto.outboundOrderId, companyId },
+        select: { id: true },
+      });
+      if (!order) throw new BadRequestException('Invalid outboundOrderId');
+    }
+
     // customerId가 오면 회사 소속인지 검증
     if (dto.customerId) {
       const customer = await this.prisma.customer.findFirst({
@@ -51,6 +60,7 @@ export class ReturnsService {
       data: {
         companyId,
         customerId: dto.customerId ?? null,
+        outboundOrderId: dto.outboundOrderId ?? null,
         receivedAt: dto.receivedAt ? new Date(dto.receivedAt) : undefined,
         memo: dto.memo,
         status: ReturnStatus.RECEIVED,
@@ -58,6 +68,7 @@ export class ReturnsService {
         lines: {
           create: dto.lines.map((l) => ({
             itemId: l.itemId,
+            outboundLineId: l.outboundLineId ?? null,
             storageType: l.storageType,
             expiryDate: l.expiryDate ? new Date(l.expiryDate) : null,
             qty: l.qty,
@@ -85,8 +96,9 @@ export class ReturnsService {
       orderBy: { receivedAt: 'desc' },
       include: {
         customer: true,
+        outboundOrder: true,
         lines: {
-          include: { item: true },
+          include: { item: true, outboundLine: true },
         },
       },
     });
@@ -98,8 +110,9 @@ export class ReturnsService {
       where: { id, companyId },
       include: {
         customer: true,
+        outboundOrder: true,
         lines: {
-          include: { item: true },
+          include: { item: true, outboundLine: true },
         },
       },
     });
@@ -151,12 +164,27 @@ export class ReturnsService {
         }
       }
 
+      // outboundOrderId 검증(있으면 회사 범위 확인)
+      if (dto.outboundOrderId !== undefined) {
+        if (dto.outboundOrderId) {
+          const order = await tx.outboundOrder.findFirst({
+            where: { id: dto.outboundOrderId, companyId },
+            select: { id: true },
+          });
+          if (!order) throw new BadRequestException('Invalid outboundOrderId');
+        }
+      }
+
       // 헤더 업데이트 (undefined = 변경 없음, null = clear)
       await tx.returnReceipt.update({
         where: { id },
         data: {
           customerId:
             dto.customerId === undefined ? undefined : (dto.customerId ?? null),
+          outboundOrderId:
+            dto.outboundOrderId === undefined
+              ? undefined
+              : (dto.outboundOrderId ?? null),
           receivedAt: dto.receivedAt ? new Date(dto.receivedAt) : undefined,
           memo: dto.memo === undefined ? undefined : (dto.memo ?? null),
           version: { increment: 1 },
@@ -193,6 +221,7 @@ export class ReturnsService {
               data: {
                 // (선택) 상품/보관타입 변경도 허용
                 itemId: patch.itemId ?? undefined,
+                outboundLineId: patch.outboundLineId ?? undefined,
                 storageType: patch.storageType ?? undefined,
 
                 qty: patch.qty ?? undefined,
@@ -225,6 +254,7 @@ export class ReturnsService {
             data: {
               receiptId: receipt.id,
               itemId: patch.itemId,
+              outboundLineId: patch.outboundLineId ?? null,
               storageType: patch.storageType,
               expiryDate: patch.expiryDate ? new Date(patch.expiryDate) : null,
               qty: patch.qty,

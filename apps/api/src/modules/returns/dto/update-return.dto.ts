@@ -30,6 +30,11 @@ export class UpdateReturnLineDto {
   @IsUUID()
   itemId?: string;
 
+  @ApiPropertyOptional({ description: '출고 라인 ID' })
+  @IsOptional()
+  @IsUUID()
+  outboundLineId?: string;
+
   @ApiPropertyOptional({ enum: StorageType })
   @IsOptional()
   @IsEnum(StorageType)
@@ -63,6 +68,11 @@ export class UpdateReturnReceiptDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
+
+  @ApiPropertyOptional({ description: '출고 주문 ID' })
+  @IsOptional()
+  @IsUUID()
+  outboundOrderId?: string;
 
   @ApiPropertyOptional({ example: '2026-02-20' })
   @IsOptional()

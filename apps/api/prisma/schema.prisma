@@ -422,6 +422,7 @@ model OutboundOrder {
   memo String?
 
   lines OutboundLine[]
+  returnReceipts ReturnReceipt[]
 
   version   Int      @default(1)
   createdAt DateTime @default(now())
@@ -457,6 +458,7 @@ model OutboundLine {
   updatedAt DateTime @updatedAt
 
   pickAllocations PickAllocation[]
+  returnReceiptLines ReturnReceiptLine[]
 
   @@index([orderId])
   @@index([itemId])
@@ -516,6 +518,9 @@ model ReturnReceipt {
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
+  outboundOrderId String?
+  outboundOrder   OutboundOrder? @relation(fields: [outboundOrderId], references: [id], onDelete: SetNull)
+
   receivedAt DateTime     @default(now())
   status     ReturnStatus @default(RECEIVED)
   memo       String?
@@ -541,6 +546,7 @@ model ReturnReceipt {
   @@index([companyId, status])
   @@index([companyId, receivedAt])
   @@index([companyId, customerId])
+  @@index([companyId, outboundOrderId])
 }
 
 model ReturnReceiptLine {
@@ -550,6 +556,9 @@ model ReturnReceiptLine {
 
   itemId String
   item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  outboundLineId String?
+  outboundLine   OutboundLine? @relation(fields: [outboundLineId], references: [id], onDelete: SetNull)
 
   storageType StorageType
   expiryDate  DateTime?
@@ -573,4 +582,5 @@ model ReturnReceiptLine {
   @@index([receiptId])
   @@index([itemId])
   @@index([itemId, expiryDate])
+  @@index([outboundLineId])
 }
