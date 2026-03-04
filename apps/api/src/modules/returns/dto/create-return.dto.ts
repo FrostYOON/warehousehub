@@ -18,6 +18,11 @@ class CreateReturnLineDto {
   @IsUUID()
   itemId!: string;
 
+  @ApiPropertyOptional({ description: '출고 라인 ID (출고 주문 연동 시)' })
+  @IsOptional()
+  @IsUUID()
+  outboundLineId?: string;
+
   @ApiProperty({ enum: StorageType })
   @IsEnum(StorageType)
   storageType!: StorageType;
@@ -44,6 +49,11 @@ export class CreateReturnReceiptDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
+
+  @ApiPropertyOptional({ description: '출고 주문 ID (출고 연동 반품)' })
+  @IsOptional()
+  @IsUUID()
+  outboundOrderId?: string;
 
   @ApiPropertyOptional({
     description: '접수일(기본 now)',
