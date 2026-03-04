@@ -122,6 +122,17 @@ model User {
   role         Role    @default(WH_MANAGER)
   isActive     Boolean @default(true)
 
+  /// 개인정보 (optional)
+  dateOfBirth    DateTime?
+  phone          String?   // E.164
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  stateProvince  String?
+  postalCode     String?
+  countryCode    String?   // ISO 3166-1 alpha-2 (KR, US 등)
+  profileImageUrl String?
+
   refreshTokens RefreshToken[]
 
   /// 이 사용자가 발생시킨 재고 트랜잭션

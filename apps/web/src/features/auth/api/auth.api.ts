@@ -7,6 +7,7 @@ import type {
   LogoutOthersResponse,
   MeResponse,
   SignupRequest,
+  UpdateProfilePayload,
 } from '@/features/auth/model/types';
 
 export async function login(payload: LoginRequest): Promise<void> {
@@ -25,6 +26,18 @@ export async function signupRequest(payload: SignupRequest): Promise<void> {
 export async function getMe(): Promise<MeResponse> {
   const res = await httpClient.get<MeResponse>('/auth/me');
   return res.data;
+}
+
+export async function updateProfile(payload: UpdateProfilePayload): Promise<MeResponse> {
+  const res = await httpClient.patch<MeResponse>('/auth/me', payload);
+  return res.data;
+}
+
+export async function changePassword(payload: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  await httpClient.post('/auth/change-password', payload);
 }
 
 export async function logout(): Promise<void> {

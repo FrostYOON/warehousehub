@@ -85,6 +85,15 @@ export function useAuthSession() {
     }
   }
 
+  async function refreshMe() {
+    try {
+      const meData = await getMe();
+      setMe(meData);
+    } catch {
+      showToast('계정 정보를 불러오지 못했습니다.', 'error');
+    }
+  }
+
   async function refreshDevices() {
     setLoadingDevices(true);
     try {
@@ -169,5 +178,6 @@ export function useAuthSession() {
     revokeDevice,
     signOutOthers,
     approveUser,
+    refreshMe,
   };
 }

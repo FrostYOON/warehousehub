@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
   UseInterceptors,
@@ -12,9 +13,11 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SignupRequestDto } from './dto/signup-request.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -95,6 +98,28 @@ export class AuthController {
   @ApiOkResponse({ type: MeResponseDto })
   me(@CurrentUser() user: CurrentUserPayload) {
     return this.auth.me(user.userId);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Patch('me')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ type: MeResponseDto })
+  updateProfile(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.auth.updateProfile(user.userId, dto);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('change-password')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ type: OkResponseDto })
+  changePassword(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.auth.changePassword(user.userId, dto);
   }
 
   @UseGuards(AuthGuard('jwt'))

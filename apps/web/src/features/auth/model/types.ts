@@ -30,6 +30,28 @@ export type MeResponse = {
   role: UserRole;
   companyId: string;
   companyName: string | null;
+  dateOfBirth?: string | null;
+  phone?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  stateProvince?: string | null;
+  postalCode?: string | null;
+  countryCode?: string | null;
+  profileImageUrl?: string | null;
+};
+
+export type UpdateProfilePayload = {
+  name: string;
+  dateOfBirth?: string | null;
+  phone?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  stateProvince?: string | null;
+  postalCode?: string | null;
+  countryCode?: string | null;
+  profileImageUrl?: string | null;
 };
 
 export type DeviceSession = {

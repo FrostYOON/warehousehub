@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class MeResponseDto {
   @ApiProperty({ example: 'uuid' })
@@ -18,6 +18,33 @@ export class MeResponseDto {
 
   @ApiProperty({ example: 'WarehouseHub' })
   companyName!: string;
+
+  @ApiPropertyOptional({ example: '1990-01-15', nullable: true })
+  dateOfBirth?: string | null;
+
+  @ApiPropertyOptional({ example: '+821012345678', nullable: true })
+  phone?: string | null;
+
+  @ApiPropertyOptional({ example: '서울시 강남구 테헤란로 123', nullable: true })
+  addressLine1?: string | null;
+
+  @ApiPropertyOptional({ example: '456호', nullable: true })
+  addressLine2?: string | null;
+
+  @ApiPropertyOptional({ example: '서울', nullable: true })
+  city?: string | null;
+
+  @ApiPropertyOptional({ example: '강남구', nullable: true })
+  stateProvince?: string | null;
+
+  @ApiPropertyOptional({ example: '06234', nullable: true })
+  postalCode?: string | null;
+
+  @ApiPropertyOptional({ example: 'KR', nullable: true })
+  countryCode?: string | null;
+
+  @ApiPropertyOptional({ example: 'https://s3.example.com/avatar.jpg', nullable: true })
+  profileImageUrl?: string | null;
 }
 
 export class LoginResponseDto {

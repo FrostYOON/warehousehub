@@ -21,6 +21,8 @@ import { getModuleLogger } from '../../common/logging/module-logger';
 import type { RegisterDto } from './dto/register.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { SignupRequestDto } from './dto/signup-request.dto';
+import type { UpdateProfileDto } from './dto/update-profile.dto';
+import type { ChangePasswordDto } from './dto/change-password.dto';
 import type { RequestMeta } from './http/decorators/req-meta.decorator';
 
 type AccessTokenPayload = {
@@ -283,7 +285,109 @@ export class AuthService {
       role: user.role,
       companyId: user.companyId,
       companyName: company?.name ?? null,
+      dateOfBirth: user.dateOfBirth?.toISOString().split('T')[0] ?? null,
+      phone: user.phone ?? null,
+      addressLine1: user.addressLine1 ?? null,
+      addressLine2: user.addressLine2 ?? null,
+      city: user.city ?? null,
+      stateProvince: user.stateProvince ?? null,
+      postalCode: user.postalCode ?? null,
+      countryCode: user.countryCode ?? null,
+      profileImageUrl: user.profileImageUrl ?? null,
     };
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.users.findUserById(userId);
+    if (!user || !user.isActive) throw new UnauthorizedException();
+
+    const data: Record<string, unknown> = {
+      name: dto.name.trim(),
+    };
+    if (dto.dateOfBirth !== undefined) {
+      data.dateOfBirth = dto.dateOfBirth ? new Date(dto.dateOfBirth) : null;
+    }
+    if (dto.phone !== undefined) data.phone = dto.phone;
+    if (dto.addressLine1 !== undefined) data.addressLine1 = dto.addressLine1;
+    if (dto.addressLine2 !== undefined) data.addressLine2 = dto.addressLine2;
+    if (dto.city !== undefined) data.city = dto.city;
+    if (dto.stateProvince !== undefined) data.stateProvince = dto.stateProvince;
+    if (dto.postalCode !== undefined) data.postalCode = dto.postalCode;
+    if (dto.countryCode !== undefined) data.countryCode = dto.countryCode;
+    if (dto.profileImageUrl !== undefined) data.profileImageUrl = dto.profileImageUrl;
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        companyId: true,
+        dateOfBirth: true,
+        phone: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        stateProvince: true,
+        postalCode: true,
+        countryCode: true,
+        profileImageUrl: true,
+      },
+    });
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: user.companyId },
+    });
+
+    logger.info({
+      event: 'auth.profile_updated',
+      userId,
+      name: updated.name,
+    });
+
+    return {
+      id: updated.id,
+      email: updated.email,
+      name: updated.name,
+      role: updated.role,
+      companyId: updated.companyId,
+      companyName: company?.name ?? null,
+      dateOfBirth: updated.dateOfBirth?.toISOString().split('T')[0] ?? null,
+      phone: updated.phone ?? null,
+      addressLine1: updated.addressLine1 ?? null,
+      addressLine2: updated.addressLine2 ?? null,
+      city: updated.city ?? null,
+      stateProvince: updated.stateProvince ?? null,
+      postalCode: updated.postalCode ?? null,
+      countryCode: updated.countryCode ?? null,
+      profileImageUrl: updated.profileImageUrl ?? null,
+    };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.users.findUserById(userId);
+    if (!user || !user.isActive) throw new UnauthorizedException();
+
+    const ok = await comparePassword(dto.currentPassword, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedException('현재 비밀번호가 올바르지 않습니다');
+    }
+
+    const passwordHash = await hashPassword(dto.newPassword);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    logger.info({
+      event: 'auth.password_changed',
+      userId,
+    });
+
+    return { ok: true };
   }
 
   async withdraw(companyId: string, userId: string) {
