@@ -6,7 +6,8 @@ import { useAuthSession } from '@/features/auth';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { useOutboundPage } from '@/features/outbound/hooks/use-outbound-page';
 import type { StorageType } from '@/features/stocks/model/types';
-import { ActionButton, StatusBadge } from '@/shared/ui/common';
+import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
+import { ActionButton, SortableHeader, StatusBadge } from '@/shared/ui/common';
 
 export default function OutboundPage() {
   const searchParams = useSearchParams();
@@ -50,6 +51,9 @@ export default function OutboundPage() {
     setCancelReason,
     lineQtyMap,
     setLineQtyMap,
+    sortKey,
+    sortDir,
+    toggleOutboundSort,
     canEditOrder,
     createOrder,
     updateLineQty,
@@ -193,7 +197,27 @@ export default function OutboundPage() {
       );
     }
 
-    return base;
+    const factor = sortDir === 'asc' ? 1 : -1;
+    return [...base].sort((a, b) => {
+      const customerName = (c?: { name?: string; customerName?: string } | null) =>
+        c?.name ?? c?.customerName ?? '-';
+      switch (sortKey) {
+        case 'orderNo':
+          return factor * ((a.orderNo ?? 0) - (b.orderNo ?? 0));
+        case 'customer':
+          return factor * customerName(a.customer).localeCompare(customerName(b.customer));
+        case 'status':
+          return factor * a.status.localeCompare(b.status);
+        case 'plannedDate':
+          return factor * (
+            new Date(a.plannedDate).getTime() - new Date(b.plannedDate).getTime()
+          );
+        case 'lineCount':
+          return factor * (a.lines.length - b.lines.length);
+        default:
+          return 0;
+      }
+    });
   }, [
     availableCreateItems,
     drilldownFilters,
@@ -201,6 +225,8 @@ export default function OutboundPage() {
     keyword,
     orders,
     presetStatuses,
+    sortDir,
+    sortKey,
     statusFilter,
   ]);
 
@@ -432,11 +458,46 @@ export default function OutboundPage() {
             <table className="w-full min-w-[840px] text-left text-sm">
               <thead className="text-slate-500">
                 <tr>
-                  <th className="px-2 py-2">출고번호</th>
-                  <th className="px-2 py-2">고객사</th>
-                  <th className="px-2 py-2">상태</th>
-                  <th className="px-2 py-2">출고예정일</th>
-                  <th className="px-2 py-2">라인 수</th>
+                  <SortableHeader
+                    label="출고번호"
+                    sortKey="orderNo"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={toggleOutboundSort}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="고객사"
+                    sortKey="customer"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={toggleOutboundSort}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="상태"
+                    sortKey="status"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={toggleOutboundSort}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="출고예정일"
+                    sortKey="plannedDate"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={toggleOutboundSort}
+                    className="px-2 py-2"
+                  />
+                  <SortableHeader
+                    label="라인 수"
+                    sortKey="lineCount"
+                    currentSortKey={sortKey}
+                    currentSortDir={sortDir}
+                    onSort={toggleOutboundSort}
+                    className="px-2 py-2"
+                  />
                   <th className="px-2 py-2">상세</th>
                 </tr>
               </thead>
@@ -543,10 +604,10 @@ export default function OutboundPage() {
                       <td className="px-2 py-2 text-xs text-slate-600">{line.id}</td>
                       <td className="px-2 py-2">{line.item?.itemCode ?? '-'}</td>
                       <td className="px-2 py-2">{line.item?.itemName ?? '-'}</td>
-                      <td className="px-2 py-2">{line.requestedQty}</td>
-                      <td className="px-2 py-2">{line.pickedQty}</td>
-                      <td className="px-2 py-2">{line.shippedQty}</td>
-                      <td className="px-2 py-2">{line.deliveredQty}</td>
+                      <td className="px-2 py-2">{formatDecimalForDisplay(line.requestedQty)}</td>
+                      <td className="px-2 py-2">{formatDecimalForDisplay(line.pickedQty)}</td>
+                      <td className="px-2 py-2">{formatDecimalForDisplay(line.shippedQty)}</td>
+                      <td className="px-2 py-2">{formatDecimalForDisplay(line.deliveredQty)}</td>
                       <td className="px-2 py-2">
                         <StatusBadge status={line.status} />
                       </td>

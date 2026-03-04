@@ -33,7 +33,7 @@ function errorMessageFromUnknown(error: unknown): string {
 export function useOutboundPage(role?: UserRole) {
   const { showToast } = useToast();
   const [customers, setCustomers] = useState<Array<{ id: string; customerName: string }>>([]);
-  const [stockRows, setStockRows] = useState<Awaited<ReturnType<typeof getStocks>>>([]);
+  const [stockRows, setStockRows] = useState<Awaited<ReturnType<typeof getStocks>>['items']>([]);
   const [orders, setOrders] = useState<OutboundOrder[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<OutboundOrder | null>(null);
   const [loadingList, setLoadingList] = useState(false);
@@ -51,6 +51,10 @@ export function useOutboundPage(role?: UserRole) {
   const [createItemQty, setCreateItemQty] = useState<Record<string, string>>({});
   const [cancelReason, setCancelReason] = useState('');
   const [lineQtyMap, setLineQtyMap] = useState<Record<string, string>>({});
+  const [sortKey, setSortKey] = useState<
+    'orderNo' | 'customer' | 'status' | 'plannedDate' | 'lineCount'
+  >('plannedDate');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const refreshOrders = useCallback(async () => {
     setLoadingList(true);
@@ -66,9 +70,9 @@ export function useOutboundPage(role?: UserRole) {
 
   const loadFormMeta = useCallback(async () => {
     try {
-      const [customersData, stocks] = await Promise.all([getCustomers(), getStocks()]);
+      const [customersData, stocksRes] = await Promise.all([getCustomers(), getStocks()]);
       setCustomers(customersData);
-      setStockRows(stocks);
+      setStockRows(stocksRes.items);
     } catch (error) {
       showToast(errorMessageFromUnknown(error), 'error');
     }
@@ -381,6 +385,18 @@ export function useOutboundPage(role?: UserRole) {
     setCancelReason,
     lineQtyMap,
     setLineQtyMap,
+    sortKey,
+    sortDir,
+    toggleOutboundSort: (key: string) => {
+      if (sortKey === key) {
+        setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+        return;
+      }
+      setSortKey(
+        key as 'orderNo' | 'customer' | 'status' | 'plannedDate' | 'lineCount',
+      );
+      setSortDir('asc');
+    },
     canSubmitPick,
     canVerify,
     canStart,
