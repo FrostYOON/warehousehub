@@ -1,4 +1,7 @@
-import { canAccessInbound } from '@/features/auth/model/role-policy';
+import {
+  canAccessCustomers,
+  canAccessInbound,
+} from '@/features/auth/model/role-policy';
 import type { UserRole } from '@/features/auth/model/types';
 import type { DashboardMenu } from '@/features/dashboard/model/types';
 
@@ -19,12 +22,27 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
     });
   }
 
-  if (role === 'ADMIN') {
+  if (canAccessCustomers(role)) {
     menus.push({
-      label: '회원 승인',
-      description: '회원가입 신청 승인',
-      href: '/approvals',
+      label: '고객사',
+      description: '고객사 목록/등록/수정/비활성화',
+      href: '/customers',
     });
+  }
+
+  if (role === 'ADMIN') {
+    menus.push(
+      {
+        label: '회원 승인',
+        description: '회원가입 신청 승인',
+        href: '/approvals',
+      },
+      {
+        label: '회원 관리',
+        description: '회사 멤버 목록/역할/비활성화',
+        href: '/members',
+      },
+    );
   }
 
   return menus;

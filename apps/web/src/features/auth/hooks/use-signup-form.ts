@@ -5,6 +5,7 @@ import axios from 'axios';
 import { getLoginCompanies, signupRequest } from '@/features/auth/api/auth.api';
 import type { LoginCompany, SignupRequest, UserRole } from '@/features/auth/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
+import { validatePassword } from '@/shared/utils/validate-password';
 
 const ROLE_OPTIONS: Array<Exclude<UserRole, 'ADMIN'>> = [
   'WH_MANAGER',
@@ -53,6 +54,12 @@ export function useSignupForm() {
   async function submit() {
     if (!companyName) {
       showToast('회사를 선택해주세요.', 'error');
+      return;
+    }
+
+    const pwResult = validatePassword(password);
+    if (!pwResult.valid) {
+      showToast(pwResult.message, 'error');
       return;
     }
 

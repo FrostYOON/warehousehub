@@ -12,6 +12,7 @@ describe('CustomersController', () => {
     list: jest.fn(),
     update: jest.fn(),
     deactivate: jest.fn(),
+    activate: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -45,12 +46,28 @@ describe('CustomersController', () => {
     expect(customersServiceMock.create).toHaveBeenCalledWith('company-1', dto);
   });
 
-  it('list passes companyId and q to service', async () => {
+  it('list passes companyId and opts to service', async () => {
     customersServiceMock.list.mockResolvedValueOnce([]);
 
     await controller.list(req, 'kim');
 
-    expect(customersServiceMock.list).toHaveBeenCalledWith('company-1', 'kim');
+    expect(customersServiceMock.list).toHaveBeenCalledWith('company-1', {
+      q: 'kim',
+    });
+  });
+
+  it('activate passes companyId and id to service', async () => {
+    customersServiceMock.activate.mockResolvedValueOnce({
+      id: 'c1',
+      isActive: true,
+    });
+
+    await controller.activate(req, 'c1');
+
+    expect(customersServiceMock.activate).toHaveBeenCalledWith(
+      'company-1',
+      'c1',
+    );
   });
 
   it('update passes companyId, id and dto to service', async () => {

@@ -60,11 +60,114 @@ export async function logoutOtherDevices(): Promise<LogoutOthersResponse> {
   return res.data;
 }
 
-export async function getCompanyUsers(): Promise<CompanyUser[]> {
-  const res = await httpClient.get<CompanyUser[]>('/users');
+export type ListCompanyUsersParams = {
+  role?: string;
+  isActive?: boolean;
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: 'name' | 'email' | 'createdAt' | 'updatedAt';
+  sortOrder?: 'asc' | 'desc';
+};
+
+export type ListCompanyUsersResponse = {
+  total: number;
+  page: number;
+  limit: number;
+  items: CompanyUser[];
+};
+
+export type GetCompanyUsersOptions = {
+  /** refetch 시 캐시 무시 (승인/거절 후 목록 갱신 등) */
+  noCache?: boolean;
+};
+
+export async function getCompanyUsers(
+  params?: ListCompanyUsersParams,
+  options?: GetCompanyUsersOptions,
+): Promise<ListCompanyUsersResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.role) searchParams.set('role', params.role);
+  if (params?.isActive !== undefined)
+    searchParams.set('isActive', String(params.isActive));
+  if (params?.page !== undefined) searchParams.set('page', String(params.page));
+  if (params?.limit !== undefined)
+    searchParams.set('limit', String(params.limit));
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
+  // noCache: 브라우저 캐시 우회 (승인/거절 후 refetch 시 stale 방지)
+  if (options?.noCache) searchParams.set('_', String(Date.now()));
+  const qs = searchParams.toString();
+  const url = qs ? `/users?${qs}` : '/users';
+  const config = options?.noCache
+    ? { headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } }
+    : {};
+  const res = await httpClient.get<ListCompanyUsersResponse>(url, config);
   return res.data;
 }
 
 export async function approveCompanyUser(userId: string): Promise<void> {
   await httpClient.patch(`/users/${userId}/activate`);
+}
+
+export async function deactivateCompanyUser(userId: string): Promise<void> {
+  await httpClient.patch(`/users/${userId}/deactivate`);
+}
+
+export async function updateCompanyUserRole(
+  userId: string,
+  role: string,
+): Promise<void> {
+  await httpClient.patch(`/users/${userId}/role`, { role });
+}
+
+export type CreateCompanyUserPayload = {
+  email: string;
+  name: string;
+  password: string;
+  role: string;
+};
+
+export async function createCompanyUser(
+  payload: CreateCompanyUserPayload,
+): Promise<CompanyUser> {
+  const res = await httpClient.post<CompanyUser>('/users', payload);
+  return res.data;
+}
+
+export async function withdraw(): Promise<void> {
+  await httpClient.post('/auth/withdraw');
+}
+
+export async function deleteCompanyUser(userId: string): Promise<void> {
+  await httpClient.delete(`/users/${userId}`);
+}
+
+export async function bulkDeactivateCompanyUsers(
+  userIds: string[],
+): Promise<{ deactivated: number; skipped: number }> {
+  const res = await httpClient.patch<{
+    deactivated: number;
+    skipped: number;
+  }>('/users/bulk-deactivate', { userIds });
+  return res.data;
+}
+
+export async function bulkRoleCompanyUsers(
+  userIds: string[],
+  role: string,
+): Promise<{ updated: number; skipped: number }> {
+  const res = await httpClient.patch<{
+    updated: number;
+    skipped: number;
+  }>('/users/bulk-role', { userIds, role });
+  return res.data;
+}
+
+export async function getUserAuditLogs(
+  userId: string,
+): Promise<import('@/features/auth/model/types').UserAuditLogsResponse> {
+  const res = await httpClient.get(`/users/${userId}/audit-logs`);
+  return res.data;
 }

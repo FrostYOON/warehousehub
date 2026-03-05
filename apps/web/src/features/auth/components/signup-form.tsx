@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { LOGIN_PATH } from '@/features/auth/model/constants';
 import { useSignupForm } from '@/features/auth/hooks/use-signup-form';
+import { PASSWORD_REQUIREMENT_TEXT } from '@/shared/utils/validate-password';
 
 export function SignupForm() {
   const {
@@ -81,7 +82,9 @@ export function SignupForm() {
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium text-slate-700">Password</label>
+          <label className="text-sm font-medium text-slate-700">
+            Password
+          </label>
           <input
             type="password"
             className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
@@ -89,7 +92,9 @@ export function SignupForm() {
             onChange={(e) => setPassword(e.target.value)}
             disabled={submitting}
             autoComplete="new-password"
+            placeholder={PASSWORD_REQUIREMENT_TEXT}
           />
+          <p className="text-xs text-slate-500">{PASSWORD_REQUIREMENT_TEXT}</p>
         </div>
 
         <div className="space-y-1">

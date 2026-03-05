@@ -81,6 +81,26 @@ export type CompanyUser = {
   name: string;
   role: UserRole;
   isActive: boolean;
+  lastLoginAt?: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type UserAuditLogItem = {
+  id: string;
+  userId: string;
+  actorUserId: string;
+  action: string;
+  beforeValue: string | null;
+  afterValue: string | null;
+  createdAt: string;
+  actorUser: {
+    id: string;
+    name: string;
+    email: string;
+  };
+};
+
+export type UserAuditLogsResponse = {
+  items: UserAuditLogItem[];
 };

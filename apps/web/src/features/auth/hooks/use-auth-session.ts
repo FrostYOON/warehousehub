@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   approveCompanyUser,
+  deleteCompanyUser,
   getCompanyUsers,
   getDeviceSessions,
   getMe,
@@ -22,6 +23,7 @@ import type {
 
 export function useAuthSession() {
   const router = useRouter();
+  const pathname = usePathname();
   const { showToast } = useToast();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [devices, setDevices] = useState<DeviceSession[]>([]);
@@ -31,6 +33,7 @@ export function useAuthSession() {
   const [pendingUsers, setPendingUsers] = useState<CompanyUser[]>([]);
   const [loadingPendingUsers, setLoadingPendingUsers] = useState(false);
   const [approveActionId, setApproveActionId] = useState<string | null>(null);
+  const [rejectActionId, setRejectActionId] = useState<string | null>(null);
   const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
   const [loggingOutOthers, setLoggingOutOthers] = useState(false);
 
@@ -47,15 +50,41 @@ export function useAuthSession() {
         setMe(meData);
         setDevices(deviceData.devices);
         setMaxActiveDevices(deviceData.maxActiveDevices);
-        if (meData.role === 'ADMIN') {
+        // 승인 대기 목록은 /approvals 페이지에서만 로드 (불필요한 API 호출 및 에러 방지)
+        if (meData.role === 'ADMIN' && pathname === '/approvals') {
           setLoadingPendingUsers(true);
           try {
-            const users = await getCompanyUsers();
+            const data = await getCompanyUsers(
+              { isActive: false, limit: 100 },
+              { noCache: true },
+            );
             if (!alive) return;
-            setPendingUsers(users.filter((user) => !user.isActive));
-          } catch {
+            setPendingUsers(data?.items ?? []);
+          } catch (err) {
             if (!alive) return;
-            showToast('승인 대기 사용자 목록을 불러오지 못했습니다.', 'error');
+            const ax = err as { response?: { status?: number; data?: unknown }; message?: string };
+            console.error('[useAuthSession] 승인 대기 목록 로드 실패:', {
+              status: ax.response?.status,
+              data: ax.response?.data,
+              message: ax.message,
+              err,
+            });
+            setPendingUsers([]);
+            const resData = ax.response?.data as { message?: string | string[] } | undefined;
+            const apiMsg = Array.isArray(resData?.message)
+              ? resData.message[0]
+              : resData?.message;
+            const status = ax.response?.status;
+            const msg =
+              apiMsg ||
+              (status === 401
+                ? '인증이 만료되었습니다. 다시 로그인해주세요.'
+                : status === 403
+                  ? '관리자 권한이 필요합니다.'
+                  : !ax.response
+                    ? '네트워크 연결을 확인해주세요.'
+                    : '승인 대기 사용자 목록을 불러오지 못했습니다.');
+            showToast(typeof msg === 'string' ? msg : '승인 대기 사용자 목록을 불러오지 못했습니다.', 'error');
           } finally {
             if (alive) setLoadingPendingUsers(false);
           }
@@ -70,16 +99,41 @@ export function useAuthSession() {
     return () => {
       alive = false;
     };
-  }, [router, showToast]);
+  }, [router, showToast, pathname]);
 
   async function refreshPendingUsers() {
     if (me?.role !== 'ADMIN') return;
     setLoadingPendingUsers(true);
     try {
-      const users = await getCompanyUsers();
-      setPendingUsers(users.filter((user) => !user.isActive));
-    } catch {
-      showToast('승인 대기 사용자 목록을 불러오지 못했습니다.', 'error');
+      const data = await getCompanyUsers(
+        { isActive: false, limit: 100 },
+        { noCache: true },
+      );
+      setPendingUsers(data?.items ?? []);
+    } catch (err) {
+      const ax = err as { response?: { status?: number; data?: unknown }; message?: string };
+      console.error('[useAuthSession] refreshPendingUsers 실패:', {
+        status: ax.response?.status,
+        data: ax.response?.data,
+        message: ax.message,
+        err,
+      });
+      setPendingUsers([]);
+      const resData = ax.response?.data as { message?: string | string[] } | undefined;
+      const apiMsg = Array.isArray(resData?.message)
+        ? resData.message[0]
+        : resData?.message;
+      const status = ax.response?.status;
+      const msg =
+        apiMsg ||
+        (status === 401
+          ? '인증이 만료되었습니다. 다시 로그인해주세요.'
+          : status === 403
+            ? '관리자 권한이 필요합니다.'
+            : !ax.response
+              ? '네트워크 연결을 확인해주세요.'
+              : '승인 대기 사용자 목록을 불러오지 못했습니다.');
+      showToast(typeof msg === 'string' ? msg : '승인 대기 사용자 목록을 불러오지 못했습니다.', 'error');
     } finally {
       setLoadingPendingUsers(false);
     }
@@ -154,12 +208,31 @@ export function useAuthSession() {
     setApproveActionId(userId);
     try {
       await approveCompanyUser(userId);
-      await refreshPendingUsers();
+      setPendingUsers((prev) => prev.filter((u) => u.id !== userId));
       showToast('회원가입 신청을 승인했습니다.', 'success');
     } catch {
       showToast('회원 승인 처리에 실패했습니다.', 'error');
     } finally {
       setApproveActionId(null);
+    }
+  }
+
+  async function rejectUser(userId: string) {
+    setRejectActionId(userId);
+    try {
+      await deleteCompanyUser(userId);
+      setPendingUsers((prev) => prev.filter((u) => u.id !== userId));
+      showToast('회원가입 신청을 거절했습니다.', 'success');
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string | string[] } } })
+              .response?.data?.message
+          : null;
+      const message = Array.isArray(msg) ? msg[0] : msg;
+      showToast(message ?? '거절 처리에 실패했습니다.', 'error');
+    } finally {
+      setRejectActionId(null);
     }
   }
 
@@ -178,6 +251,9 @@ export function useAuthSession() {
     revokeDevice,
     signOutOthers,
     approveUser,
+    rejectUser,
+    rejectActionId,
     refreshMe,
+    refreshPendingUsers,
   };
 }

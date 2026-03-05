@@ -66,11 +66,22 @@ export class CustomersService {
     });
   }
 
-  list(companyId: string, q?: string) {
+  list(
+    companyId: string,
+    opts?: { q?: string; includeInactive?: boolean; isActive?: boolean },
+  ) {
+    const { q, includeInactive, isActive } = opts ?? {};
+    const isActiveFilter =
+      includeInactive === true
+        ? undefined
+        : isActive !== undefined
+          ? { isActive }
+          : { isActive: true };
+
     return this.prisma.customer.findMany({
       where: {
         companyId,
-        isActive: true,
+        ...isActiveFilter,
         ...(q
           ? {
               OR: [
@@ -137,5 +148,23 @@ export class CustomersService {
       customerId: id,
     });
     return deactivated;
+  }
+
+  async activate(companyId: string, id: string) {
+    const found = await this.prisma.customer.findFirst({
+      where: { id, companyId },
+    });
+    if (!found) throw new NotFoundException('Customer not found');
+
+    const activated = await this.prisma.customer.update({
+      where: { id },
+      data: { isActive: true },
+    });
+    logger.info({
+      event: 'customers.activate.success',
+      companyId,
+      customerId: id,
+    });
+    return activated;
   }
 }

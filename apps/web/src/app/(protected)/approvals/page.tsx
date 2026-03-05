@@ -12,9 +12,11 @@ export default function ApprovalsPage() {
     pendingUsers,
     loadingPendingUsers,
     approveActionId,
+    rejectActionId,
     loggingOut,
     signOut,
     approveUser,
+    rejectUser,
   } = useAuthSession();
 
   useEffect(() => {
@@ -64,14 +66,24 @@ export default function ApprovalsPage() {
                     신청일 {new Date(user.createdAt).toLocaleString()}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => approveUser(user.id)}
-                  disabled={approveActionId === user.id}
-                  className="h-9 rounded-lg border border-slate-300 px-3 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {approveActionId === user.id ? '승인 중...' : '승인'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => approveUser(user.id)}
+                    disabled={approveActionId === user.id}
+                    className="h-9 rounded-lg border border-slate-300 px-3 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {approveActionId === user.id ? '승인 중...' : '승인'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => rejectUser(user.id)}
+                    disabled={rejectActionId === user.id}
+                    className="h-9 rounded-lg border border-red-200 px-3 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {rejectActionId === user.id ? '거절 중...' : '거절'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

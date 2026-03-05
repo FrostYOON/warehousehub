@@ -121,6 +121,7 @@ model User {
   name         String
   role         Role    @default(WH_MANAGER)
   isActive     Boolean @default(true)
+  lastLoginAt DateTime?
 
   /// 개인정보 (optional)
   dateOfBirth    DateTime?
@@ -156,9 +157,29 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  userAuditLogsTarget UserAuditLog[] @relation("AuditTargetUser")
+  userAuditLogsActor  UserAuditLog[] @relation("AuditActorUser")
+
   @@unique([companyId, email])
   @@index([companyId])
   @@index([role])
+}
+
+/// 사용자 변경 감사 로그 (역할 변경, 활성화, 비활성화 등)
+model UserAuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation("AuditTargetUser", fields: [userId], references: [id], onDelete: Cascade)
+  actorUserId String
+  actorUser   User     @relation("AuditActorUser", fields: [actorUserId], references: [id], onDelete: Cascade)
+  action      String   // ROLE_CHANGED, ACTIVATED, DEACTIVATED
+  beforeValue String?  @db.Text
+  afterValue  String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([actorUserId])
+  @@index([createdAt])
 }
 
 /// 회사 내 창고
@@ -205,18 +226,19 @@ model Item {
   @@index([itemCode])
 }
 
+/// 회사(테넌트)의 거래처(고객사). 출고/리턴의 대상.
 model Customer {
   id        String  @id @default(uuid())
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   customerName    String
-  customerAddress String
+  customerAddress String // addressLine1에 해당하는 주소
 
   postalCode String?
   city       String?
   state      String?
-  country    String?
+  country    String?  // ISO 3166-1 alpha-2 (KR, US, JP 등) - countryCode로 활용
 
   lat Decimal? @db.Decimal(10, 7)
   lng Decimal? @db.Decimal(10, 7)

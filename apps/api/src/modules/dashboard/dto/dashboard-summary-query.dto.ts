@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsNumber, IsOptional, Min } from 'class-validator';
 
@@ -39,6 +40,7 @@ export class DashboardSummaryQueryDto {
     description: '리턴율 목표선(%)',
   })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   targetReturnRate = 2;

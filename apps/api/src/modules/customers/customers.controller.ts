@@ -41,8 +41,20 @@ export class CustomersController {
     Role.ACCOUNTING,
     Role.SALES,
   )
-  list(@Req() req: Request, @Query('q') q?: string) {
-    return this.customers.list(req.user!.companyId, q);
+  list(
+    @Req() req: Request,
+    @Query('q') q?: string,
+    @Query('includeInactive') includeInactive?: string,
+    @Query('isActive') isActive?: string,
+  ) {
+    const opts: { q?: string; includeInactive?: boolean; isActive?: boolean } =
+      {};
+    if (q) opts.q = q;
+    if (includeInactive === 'true') opts.includeInactive = true;
+    if (isActive === 'true' || isActive === 'false') {
+      opts.isActive = isActive === 'true';
+    }
+    return this.customers.list(req.user!.companyId, opts);
   }
 
   @Patch(':id')
@@ -59,5 +71,11 @@ export class CustomersController {
   @Roles(Role.ADMIN, Role.WH_MANAGER)
   deactivate(@Req() req: Request, @Param('id') id: string) {
     return this.customers.deactivate(req.user!.companyId, id);
+  }
+
+  @Patch(':id/activate')
+  @Roles(Role.ADMIN, Role.WH_MANAGER)
+  activate(@Req() req: Request, @Param('id') id: string) {
+    return this.customers.activate(req.user!.companyId, id);
   }
 }

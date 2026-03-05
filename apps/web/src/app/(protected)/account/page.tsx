@@ -5,9 +5,19 @@ import { useAuthSession } from '@/features/auth';
 import {
   changePassword,
   updateProfile,
+  withdraw,
 } from '@/features/auth/api/auth.api';
 import type { UpdateProfilePayload } from '@/features/auth/model/types';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
+import { COUNTRY_OPTIONS } from '@/shared/constants';
+import {
+  PASSWORD_REQUIREMENT_TEXT,
+  validatePassword,
+} from '@/shared/utils/validate-password';
+import {
+  getPostalCodeInfo,
+  validatePostalCode,
+} from '@/shared/utils/postal-code';
 import { useToast } from '@/shared/ui/toast/toast-provider';
 
 /** 한국 휴대폰 010XXXXXXXX (10자리) → E.164 +8210XXXXXXXX 변환 */
@@ -21,19 +31,6 @@ function normalizePhoneE164(phone: string, countryCode?: string | null): string 
   if (phone.trim().startsWith('+')) return phone.trim();
   return phone.trim();
 }
-
-const COUNTRY_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: '선택' },
-  { value: 'KR', label: '대한민국' },
-  { value: 'US', label: '미국' },
-  { value: 'JP', label: '일본' },
-  { value: 'CN', label: '중국' },
-  { value: 'GB', label: '영국' },
-  { value: 'DE', label: '독일' },
-  { value: 'FR', label: '프랑스' },
-  { value: 'SG', label: '싱가포르' },
-  { value: 'VN', label: '베트남' },
-];
 
 export default function AccountPage() {
   const {
@@ -49,6 +46,8 @@ export default function AccountPage() {
     signOutOthers,
     refreshMe,
   } = useAuthSession();
+  const [withdrawConfirm, setWithdrawConfirm] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   const { showToast } = useToast();
 
   const [profileName, setProfileName] = useState(me?.name ?? '');
@@ -124,6 +123,11 @@ export default function AccountPage() {
   async function handleProfileSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!me || profileSubmitting || !profileName.trim()) return;
+    const pcValidation = validatePostalCode(postalCode ?? '', countryCode);
+    if (!pcValidation.valid) {
+      showToast(pcValidation.message ?? '올바른 형식이 아닙니다.', 'error');
+      return;
+    }
     setProfileSubmitting(true);
     try {
       await updateProfile(buildProfilePayload());
@@ -145,8 +149,9 @@ export default function AccountPage() {
   async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (passwordSubmitting || !currentPassword || !newPassword) return;
-    if (newPassword.length < 8) {
-      showToast('새 비밀번호는 8자 이상이어야 합니다.', 'error');
+    const pwResult = validatePassword(newPassword);
+    if (!pwResult.valid) {
+      showToast(pwResult.message, 'error');
       return;
     }
     if (newPassword !== newPasswordConfirm) {
@@ -172,6 +177,26 @@ export default function AccountPage() {
       showToast(msg ?? '비밀번호 변경에 실패했습니다.', 'error');
     } finally {
       setPasswordSubmitting(false);
+    }
+  }
+
+  async function handleWithdraw(e: React.FormEvent) {
+    e.preventDefault();
+    if (!withdrawConfirm || withdrawing) return;
+    setWithdrawing(true);
+    try {
+      await withdraw();
+      showToast('회원 탈퇴가 완료되었습니다.', 'success');
+      await signOut();
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data
+              ?.message
+          : null;
+      showToast(msg ?? '회원 탈퇴에 실패했습니다.', 'error');
+    } finally {
+      setWithdrawing(false);
     }
   }
 
@@ -366,8 +391,16 @@ export default function AccountPage() {
                         value={postalCode}
                         onChange={(e) => setPostalCode(e.target.value)}
                         disabled={profileSubmitting}
+                        placeholder={
+                          getPostalCodeInfo(countryCode)?.example ?? '06134'
+                        }
                         autoComplete="postal-code"
                       />
+                      {countryCode && getPostalCodeInfo(countryCode) && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {getPostalCodeInfo(countryCode)!.hint}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -413,7 +446,7 @@ export default function AccountPage() {
               </div>
               <div>
                 <label htmlFor="new-password" className={labelClass}>
-                  새 비밀번호 (8자 이상)
+                  새 비밀번호 ({PASSWORD_REQUIREMENT_TEXT})
                 </label>
                 <input
                   id="new-password"
@@ -451,6 +484,35 @@ export default function AccountPage() {
                 className={btnPrimary}
               >
                 {passwordSubmitting ? '변경 중...' : '비밀번호 변경'}
+              </button>
+            </form>
+          </section>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-700">회원 탈퇴</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              탈퇴 시 계정이 비활성화되고 모든 세션에서 로그아웃됩니다. 재가입 후
+              관리자 승인이 필요합니다.
+            </p>
+            <form onSubmit={handleWithdraw} className="mt-3 space-y-3">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={withdrawConfirm}
+                  onChange={(e) => setWithdrawConfirm(e.target.checked)}
+                  disabled={withdrawing}
+                  className="rounded border-slate-300"
+                />
+                <span className="text-sm text-slate-700">
+                  탈퇴를 확인합니다. 위 내용을 이해했으며 진행합니다.
+                </span>
+              </label>
+              <button
+                type="submit"
+                disabled={!withdrawConfirm || withdrawing}
+                className="h-9 rounded-lg border border-red-300 bg-white px-3 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {withdrawing ? '처리 중...' : '회원 탈퇴'}
               </button>
             </form>
           </section>

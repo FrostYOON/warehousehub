@@ -167,6 +167,11 @@ export class AuthService {
     const ok = await comparePassword(dto.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
 
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
     const accessToken = await this.issueAccessToken({
       userId: user.id,
       companyId: company.id,
@@ -391,7 +396,9 @@ export class AuthService {
   }
 
   async withdraw(companyId: string, userId: string) {
-    await this.users.deactivate(companyId, userId);
+    await this.users.deactivate(companyId, userId, userId, {
+      allowSelf: true,
+    });
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },

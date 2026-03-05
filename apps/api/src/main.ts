@@ -18,15 +18,18 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // CORS (web 붙을 때: HttpOnly cookie 사용하려면 credentials + 정확한 origin 필요)
-  const webOrigin = cfg.get<string>('CORS_ORIGIN', 'http://localhost:3000');
+  const originsRaw = cfg.get<string>('CORS_ORIGIN', 'http://localhost:3000');
+  const origins = originsRaw.split(',').map((o) => o.trim()).filter(Boolean);
 
   app.enableCors({
-    origin: [webOrigin],
+    origin: origins.length > 0 ? origins : ['http://localhost:3000'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
+      'Cache-Control',
+      'Pragma',
       'X-Request-Id',
       'X-Device-Id',
       'X-Device-Name',
@@ -40,8 +43,10 @@ async function bootstrap() {
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
+      // enableImplicitConversion: true 시 Boolean("false")가 true로 잘못 변환됨
+      // (비어있지 않은 문자열은 JS에서 truthy). isActive=false 쿼리 파싱 오류 방지.
       transformOptions: {
-        enableImplicitConversion: true,
+        enableImplicitConversion: false,
       },
     }),
   );

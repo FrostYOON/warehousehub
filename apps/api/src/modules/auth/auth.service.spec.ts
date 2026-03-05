@@ -22,6 +22,9 @@ describe('AuthService', () => {
       update: jest.fn(),
       create: jest.fn(),
     },
+    user: {
+      update: jest.fn(),
+    },
     company: {
       findUnique: jest.fn(),
     },
@@ -102,6 +105,7 @@ describe('AuthService', () => {
         passwordHash: 'hashed',
       });
       (comparePassword as jest.Mock).mockResolvedValueOnce(true);
+      prismaMock.user.update.mockResolvedValueOnce({});
       jwtMock.signAsync.mockResolvedValueOnce('access-token');
       prismaMock.refreshToken.create.mockResolvedValueOnce({});
 

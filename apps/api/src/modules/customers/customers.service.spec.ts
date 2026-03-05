@@ -121,7 +121,7 @@ describe('CustomersService', () => {
 
     it('applies search query on expected fields', async () => {
       prismaMock.customer.findMany.mockResolvedValueOnce([]);
-      await service.list('company-1', 'kim');
+      await service.list('company-1', { q: 'kim' });
 
       const [findManyArg] = prismaMock.customer.findMany.mock.calls as [
         [{ where: { companyId: string; isActive: boolean; OR?: unknown[] } }],
@@ -130,6 +130,17 @@ describe('CustomersService', () => {
       expect(findManyArg[0].where.isActive).toBe(true);
       expect(Array.isArray(findManyArg[0].where.OR)).toBe(true);
       expect(findManyArg[0].where.OR).toHaveLength(6);
+    });
+
+    it('includes inactive when includeInactive is true', async () => {
+      prismaMock.customer.findMany.mockResolvedValueOnce([]);
+      await service.list('company-1', { includeInactive: true });
+
+      const [findManyArg] = prismaMock.customer.findMany.mock.calls as [
+        [{ where: { companyId: string } }],
+      ];
+      expect(findManyArg[0].where.companyId).toBe('company-1');
+      expect(findManyArg[0].where).not.toHaveProperty('isActive');
     });
   });
 
@@ -211,6 +222,30 @@ describe('CustomersService', () => {
       expect(prismaMock.customer.update).toHaveBeenCalledWith({
         where: { id: 'customer-1' },
         data: { isActive: false },
+      });
+    });
+  });
+
+  describe('activate', () => {
+    it('throws not found when customer does not exist', async () => {
+      prismaMock.customer.findFirst.mockResolvedValueOnce(null);
+      await expect(
+        service.activate('company-1', 'customer-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('sets isActive=true for matched customer', async () => {
+      prismaMock.customer.findFirst.mockResolvedValueOnce({ id: 'customer-1' });
+      prismaMock.customer.update.mockResolvedValueOnce({
+        id: 'customer-1',
+        isActive: true,
+      });
+
+      await service.activate('company-1', 'customer-1');
+
+      expect(prismaMock.customer.update).toHaveBeenCalledWith({
+        where: { id: 'customer-1' },
+        data: { isActive: true },
       });
     });
   });
