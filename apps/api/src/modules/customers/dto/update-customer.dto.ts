@@ -6,6 +6,12 @@ export class UpdateCustomerDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(50)
+  customerCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   @MaxLength(200)
   customerName?: string;
 

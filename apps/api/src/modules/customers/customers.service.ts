@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -44,10 +46,12 @@ export class CustomersService {
     return this.normalizeRequiredString(value, field);
   }
 
-  create(companyId: string, dto: CreateCustomerDto) {
-    return this.prisma.customer.create({
+  async create(companyId: string, dto: CreateCustomerDto) {
+    try {
+      return await this.prisma.customer.create({
       data: {
         companyId,
+        customerCode: this.normalizeOptionalStringForCreate(dto.customerCode),
         customerName: this.normalizeRequiredString(
           dto.customerName,
           'customerName',
@@ -64,6 +68,17 @@ export class CustomersService {
         lng: dto.lng ?? null,
       },
     });
+    } catch (error) {
+      if (
+        error instanceof PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          '같은 회사 내에 동일한 고객사명이 이미 등록되어 있습니다.',
+        );
+      }
+      throw error;
+    }
   }
 
   list(
@@ -85,6 +100,7 @@ export class CustomersService {
         ...(q
           ? {
               OR: [
+                { customerCode: { contains: q, mode: 'insensitive' } },
                 { customerName: { contains: q, mode: 'insensitive' } },
                 { customerAddress: { contains: q, mode: 'insensitive' } },
                 { city: { contains: q, mode: 'insensitive' } },
@@ -105,31 +121,44 @@ export class CustomersService {
     });
     if (!found) throw new NotFoundException('Customer not found');
 
-    const updated = await this.prisma.customer.update({
-      where: { id },
-      data: {
-        customerName: this.normalizeRequiredStringForUpdate(
-          dto.customerName,
-          'customerName',
-        ),
-        customerAddress: this.normalizeRequiredStringForUpdate(
-          dto.customerAddress,
-          'customerAddress',
-        ),
-        postalCode: this.normalizeOptionalStringForUpdate(dto.postalCode),
-        city: this.normalizeOptionalStringForUpdate(dto.city),
-        state: this.normalizeOptionalStringForUpdate(dto.state),
-        country: this.normalizeOptionalStringForUpdate(dto.country),
-        lat: dto.lat,
-        lng: dto.lng,
-      },
-    });
-    logger.info({
+    try {
+      const updated = await this.prisma.customer.update({
+        where: { id },
+        data: {
+          customerCode: this.normalizeOptionalStringForUpdate(dto.customerCode),
+          customerName: this.normalizeRequiredStringForUpdate(
+            dto.customerName,
+            'customerName',
+          ),
+          customerAddress: this.normalizeRequiredStringForUpdate(
+            dto.customerAddress,
+            'customerAddress',
+          ),
+          postalCode: this.normalizeOptionalStringForUpdate(dto.postalCode),
+          city: this.normalizeOptionalStringForUpdate(dto.city),
+          state: this.normalizeOptionalStringForUpdate(dto.state),
+          country: this.normalizeOptionalStringForUpdate(dto.country),
+          lat: dto.lat,
+          lng: dto.lng,
+        },
+      });
+      logger.info({
       event: 'customers.update.success',
       companyId,
       customerId: id,
     });
-    return updated;
+      return updated;
+    } catch (error) {
+      if (
+        error instanceof PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          '같은 회사 내에 동일한 고객사명이 이미 등록되어 있습니다.',
+        );
+      }
+      throw error;
+    }
   }
 
   async deactivate(companyId: string, id: string) {

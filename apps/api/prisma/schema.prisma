@@ -232,7 +232,8 @@ model Customer {
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  customerName    String
+  customerCode  String? // 고객사 코드 (선택, ERP/외부 시스템 연동용)
+  customerName  String
   customerAddress String // addressLine1에 해당하는 주소
 
   postalCode String?
@@ -250,6 +251,7 @@ model Customer {
   outboundOrders OutboundOrder[]
   returnReceipts ReturnReceipt[]
 
+  @@unique([companyId, customerName])
   @@index([companyId])
   @@index([customerName])
 }

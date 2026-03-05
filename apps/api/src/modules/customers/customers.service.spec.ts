@@ -53,6 +53,7 @@ describe('CustomersService', () => {
       expect(prismaMock.customer.create).toHaveBeenCalledWith({
         data: {
           companyId: 'company-1',
+          customerCode: null,
           customerName: 'ACME',
           customerAddress: 'Seoul',
           postalCode: '12345',
@@ -80,6 +81,7 @@ describe('CustomersService', () => {
         [
           {
             data: {
+              customerCode: unknown;
               postalCode: unknown;
               city: unknown;
               state: unknown;
@@ -88,19 +90,20 @@ describe('CustomersService', () => {
           },
         ],
       ];
+      expect(createArg[0].data.customerCode).toBeNull();
       expect(createArg[0].data.postalCode).toBeNull();
       expect(createArg[0].data.city).toBeNull();
       expect(createArg[0].data.state).toBeNull();
       expect(createArg[0].data.country).toBeNull();
     });
 
-    it('throws when required fields are blank', () => {
+    it('throws when required fields are blank', async () => {
       const dto: CreateCustomerDto = {
         customerName: '   ',
         customerAddress: 'Address',
       };
 
-      expect(() => service.create('company-1', dto)).toThrow(
+      await expect(service.create('company-1', dto)).rejects.toThrow(
         BadRequestException,
       );
       expect(prismaMock.customer.create).not.toHaveBeenCalled();
@@ -129,7 +132,7 @@ describe('CustomersService', () => {
       expect(findManyArg[0].where.companyId).toBe('company-1');
       expect(findManyArg[0].where.isActive).toBe(true);
       expect(Array.isArray(findManyArg[0].where.OR)).toBe(true);
-      expect(findManyArg[0].where.OR).toHaveLength(6);
+      expect(findManyArg[0].where.OR).toHaveLength(7);
     });
 
     it('includes inactive when includeInactive is true', async () => {

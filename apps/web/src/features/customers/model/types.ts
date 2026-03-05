@@ -1,5 +1,6 @@
 export type Customer = {
   id: string;
+  customerCode: string | null;
   customerName: string;
   customerAddress: string;
   postalCode: string | null;
@@ -12,6 +13,7 @@ export type Customer = {
 };
 
 export type CreateCustomerPayload = {
+  customerCode?: string;
   customerName: string;
   customerAddress: string;
   postalCode?: string;

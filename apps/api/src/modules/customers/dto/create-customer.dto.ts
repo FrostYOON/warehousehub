@@ -3,6 +3,12 @@ import { IsOptional, IsString, MaxLength, IsNumber } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateCustomerDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  customerCode?: string;
+
   @ApiProperty()
   @IsString()
   @MaxLength(200)

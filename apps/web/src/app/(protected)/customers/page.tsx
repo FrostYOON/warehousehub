@@ -17,6 +17,7 @@ import { getPostalCodeInfo, validatePostalCode } from '@/shared/utils/postal-cod
 import { useToast } from '@/shared/ui/toast/toast-provider';
 
 const INIT_FORM: CreateCustomerPayload & Record<string, string> = {
+  customerCode: '',
   customerName: '',
   customerAddress: '',
   postalCode: '',
@@ -126,6 +127,7 @@ export default function CustomersPage() {
   function openEditModal(c: Customer) {
     setEditCustomer(c);
     setEditForm({
+      customerCode: c.customerCode ?? '',
       customerName: c.customerName,
       customerAddress: c.customerAddress,
       postalCode: c.postalCode ?? '',
@@ -150,6 +152,9 @@ export default function CustomersPage() {
     setAddSubmitting(true);
     try {
       await createCustomer({
+        ...((addForm.customerCode ?? '').trim() && {
+          customerCode: (addForm.customerCode ?? '').trim(),
+        }),
         customerName: addForm.customerName.trim(),
         customerAddress: addForm.customerAddress.trim(),
         ...((addForm.postalCode ?? '').trim() && {
@@ -197,6 +202,7 @@ export default function CustomersPage() {
     setEditSubmitting(true);
     try {
       await updateCustomer(editCustomer.id, {
+        customerCode: (editForm.customerCode ?? '').trim(),
         customerName: editForm.customerName.trim(),
         customerAddress: editForm.customerAddress.trim(),
         postalCode: editForm.postalCode?.trim() ?? '',
@@ -248,7 +254,7 @@ export default function CustomersPage() {
         <div className="mb-4 flex flex-wrap gap-2">
           <input
             type="search"
-            placeholder="고객사명·주소·도시 등 검색"
+            placeholder="코드·고객사명·주소·도시 등 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-9 w-56 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
@@ -281,6 +287,7 @@ export default function CustomersPage() {
             <table className="w-full min-w-[720px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-slate-600">
+                  <th className="pb-2 pr-4">코드</th>
                   <th className="pb-2 pr-4">고객사명</th>
                   <th className="pb-2 pr-4">주소</th>
                   <th className="pb-2 pr-4">우편번호</th>
@@ -297,6 +304,9 @@ export default function CustomersPage() {
                     key={c.id}
                     className="border-b border-slate-100 last:border-0"
                   >
+                    <td className="py-3 pr-4 text-slate-600">
+                      {c.customerCode ?? '-'}
+                    </td>
                     <td className="py-3 pr-4 font-medium text-slate-800">
                       {c.customerName}
                     </td>
@@ -372,6 +382,25 @@ export default function CustomersPage() {
                 고객사 추가
               </h3>
               <form onSubmit={handleAddSubmit} className="mt-3 space-y-3">
+                <div>
+                  <label
+                    htmlFor="add-code"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    고객사 코드
+                  </label>
+                  <input
+                    id="add-code"
+                    type="text"
+                    value={addForm.customerCode}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, customerCode: e.target.value }))
+                    }
+                    disabled={addSubmitting}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    placeholder="ERP 코드 등 (선택)"
+                  />
+                </div>
                 <div>
                   <label
                     htmlFor="add-name"
@@ -533,6 +562,25 @@ export default function CustomersPage() {
                 고객사 수정 — {editCustomer.customerName}
               </h3>
               <form onSubmit={handleEditSubmit} className="mt-3 space-y-3">
+                <div>
+                  <label
+                    htmlFor="edit-code"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    고객사 코드
+                  </label>
+                  <input
+                    id="edit-code"
+                    type="text"
+                    value={editForm.customerCode}
+                    onChange={(e) =>
+                      setEditForm((f) => ({ ...f, customerCode: e.target.value }))
+                    }
+                    disabled={editSubmitting}
+                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    placeholder="ERP 코드 등 (선택)"
+                  />
+                </div>
                 <div>
                   <label
                     htmlFor="edit-name"
