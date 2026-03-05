@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { CustomersService } from './customers.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { CreateCustomerDto } from './dto/create-customer.dto';
@@ -108,6 +113,23 @@ describe('CustomersService', () => {
       );
       expect(prismaMock.customer.create).not.toHaveBeenCalled();
     });
+
+    it('throws ConflictException on duplicate customer name (P2002)', async () => {
+      const dto: CreateCustomerDto = {
+        customerName: 'ACME',
+        customerAddress: 'Seoul',
+      };
+      const err = new PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '1.0' },
+      );
+      prismaMock.customer.create.mockRejectedValue(err);
+
+      await expect(service.create('company-1', dto)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prismaMock.customer.create).toHaveBeenCalled();
+    });
   });
 
   describe('list', () => {
@@ -133,6 +155,39 @@ describe('CustomersService', () => {
       expect(findManyArg[0].where.isActive).toBe(true);
       expect(Array.isArray(findManyArg[0].where.OR)).toBe(true);
       expect(findManyArg[0].where.OR).toHaveLength(7);
+      expect(findManyArg[0].where.OR).toEqual(
+        expect.arrayContaining([
+          { customerCode: { contains: 'kim', mode: 'insensitive' } },
+          { customerName: { contains: 'kim', mode: 'insensitive' } },
+          { customerAddress: { contains: 'kim', mode: 'insensitive' } },
+          { city: { contains: 'kim', mode: 'insensitive' } },
+          { state: { contains: 'kim', mode: 'insensitive' } },
+          { postalCode: { contains: 'kim', mode: 'insensitive' } },
+          { country: { contains: 'kim', mode: 'insensitive' } },
+        ]),
+      );
+    });
+
+    it('applies isActive filter when explicitly false', async () => {
+      prismaMock.customer.findMany.mockResolvedValueOnce([]);
+      await service.list('company-1', { isActive: false });
+
+      const [findManyArg] = prismaMock.customer.findMany.mock.calls as [
+        [{ where: { companyId: string; isActive: boolean } }],
+      ];
+      expect(findManyArg[0].where.companyId).toBe('company-1');
+      expect(findManyArg[0].where.isActive).toBe(false);
+    });
+
+    it('orders by customerName asc', async () => {
+      prismaMock.customer.findMany.mockResolvedValueOnce([]);
+      await service.list('company-1');
+
+      expect(prismaMock.customer.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { customerName: 'asc' },
+        }),
+      );
     });
 
     it('includes inactive when includeInactive is true', async () => {
@@ -203,14 +258,40 @@ describe('CustomersService', () => {
       ).rejects.toThrow(BadRequestException);
       expect(prismaMock.customer.update).not.toHaveBeenCalled();
     });
+
+    it('throws ConflictException on duplicate customer name (P2002)', async () => {
+      prismaMock.customer.findFirst.mockResolvedValueOnce({ id: 'customer-1' });
+      const err = new PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '1.0' },
+      );
+      prismaMock.customer.update.mockRejectedValue(err);
+
+      await expect(
+        service.update('company-1', 'customer-1', { customerName: 'Dup' }),
+      ).rejects.toThrow(ConflictException);
+      expect(prismaMock.customer.update).toHaveBeenCalled();
+    });
+
+    it('enforces company isolation on update', async () => {
+      prismaMock.customer.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.update('company-2', 'customer-1', { city: 'Seoul' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(prismaMock.customer.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('deactivate', () => {
-    it('throws not found when customer does not exist', async () => {
+    it('throws not found when customer does not exist or is out of company', async () => {
       prismaMock.customer.findFirst.mockResolvedValueOnce(null);
       await expect(
         service.deactivate('company-1', 'customer-1'),
       ).rejects.toThrow(NotFoundException);
+      expect(prismaMock.customer.findFirst).toHaveBeenCalledWith({
+        where: { id: 'customer-1', companyId: 'company-1' },
+      });
     });
 
     it('sets isActive=false for matched customer', async () => {
@@ -230,11 +311,14 @@ describe('CustomersService', () => {
   });
 
   describe('activate', () => {
-    it('throws not found when customer does not exist', async () => {
+    it('throws not found when customer does not exist or is out of company', async () => {
       prismaMock.customer.findFirst.mockResolvedValueOnce(null);
       await expect(
         service.activate('company-1', 'customer-1'),
       ).rejects.toThrow(NotFoundException);
+      expect(prismaMock.customer.findFirst).toHaveBeenCalledWith({
+        where: { id: 'customer-1', companyId: 'company-1' },
+      });
     });
 
     it('sets isActive=true for matched customer', async () => {
