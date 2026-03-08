@@ -5,9 +5,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class WarehousesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(companyId: string) {
+  list(companyId: string, branchIds?: string[] | null) {
     return this.prisma.warehouse.findMany({
-      where: { companyId },
+      where: {
+        companyId,
+        ...(branchIds?.length && { branchId: { in: branchIds } }),
+      },
       orderBy: [{ branch: { name: 'asc' } }, { type: 'asc' }, { region: 'asc' }],
       select: {
         id: true,

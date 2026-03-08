@@ -6,6 +6,7 @@ import type { Request } from 'express';
 
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { UserBranchAccessService } from '../users/user-branch-access.service';
 import { BranchesService } from './branches.service';
 import { CreateBranchDto } from './dto/create-branch.dto';
 
@@ -14,7 +15,10 @@ import { CreateBranchDto } from './dto/create-branch.dto';
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('branches')
 export class BranchesController {
-  constructor(private readonly branches: BranchesService) {}
+  constructor(
+    private readonly branches: BranchesService,
+    private readonly userBranchAccess: UserBranchAccessService,
+  ) {}
 
   @Get()
   @Roles(
@@ -39,8 +43,12 @@ export class BranchesController {
       ],
     },
   })
-  list(@Req() req: Request) {
-    return this.branches.list(req.user!.companyId);
+  async list(@Req() req: Request) {
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      req.user!.companyId,
+      req.user!.userId,
+    );
+    return this.branches.list(req.user!.companyId, branchIds);
   }
 
   @Get(':id')
@@ -51,8 +59,12 @@ export class BranchesController {
     Role.ACCOUNTING,
     Role.SALES,
   )
-  get(@Req() req: Request, @Param('id') id: string) {
-    return this.branches.findById(req.user!.companyId, id);
+  async get(@Req() req: Request, @Param('id') id: string) {
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      req.user!.companyId,
+      req.user!.userId,
+    );
+    return this.branches.findById(req.user!.companyId, id, branchIds);
   }
 
   @Post()

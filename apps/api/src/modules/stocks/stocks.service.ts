@@ -153,12 +153,14 @@ export class StocksService {
 
   private stockWhere(params: {
     companyId: string;
+    branchIds?: string[] | null;
     storageType?: StorageType;
     warehouseId?: string;
     itemCode?: string;
     expirySoon?: 7 | 14 | 30 | 60 | 90;
   }): Prisma.StockWhereInput {
-    const { companyId, storageType, warehouseId, itemCode, expirySoon } = params;
+    const { companyId, branchIds, storageType, warehouseId, itemCode, expirySoon } =
+      params;
     const normalizedItemCode = itemCode?.trim() || undefined;
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -176,10 +178,12 @@ export class StocksService {
     }
     const warehouseFilter =
       warehouseId
-        ? { id: warehouseId }
+        ? { id: warehouseId, ...(branchIds?.length && { branchId: { in: branchIds } }) }
         : storageType
-          ? { type: storageType }
-          : undefined;
+          ? { type: storageType, ...(branchIds?.length && { branchId: { in: branchIds } }) }
+          : branchIds?.length
+            ? { branchId: { in: branchIds } }
+            : undefined;
     return {
       companyId,
       warehouse: warehouseFilter,
@@ -189,6 +193,7 @@ export class StocksService {
 
   private async listRows(params: {
     companyId: string;
+    branchIds?: string[] | null;
     storageType?: StorageType;
     warehouseId?: string;
     itemCode?: string;
@@ -199,6 +204,7 @@ export class StocksService {
     const rows = await this.prisma.stock.findMany({
       where: this.stockWhere({
         companyId: params.companyId,
+        branchIds: params.branchIds,
         storageType: params.storageType,
         warehouseId: params.warehouseId,
         itemCode: params.itemCode,
@@ -259,6 +265,7 @@ export class StocksService {
 
   async list(params: {
     companyId: string;
+    branchIds?: string[] | null;
     storageType?: StorageType;
     warehouseId?: string;
     itemCode?: string;
@@ -273,6 +280,7 @@ export class StocksService {
     const [items, total] = await Promise.all([
       this.listRows({
         companyId: params.companyId,
+        branchIds: params.branchIds,
         storageType: params.storageType,
         warehouseId: params.warehouseId,
         itemCode: params.itemCode,
@@ -283,6 +291,7 @@ export class StocksService {
       this.prisma.stock.count({
         where: this.stockWhere({
           companyId: params.companyId,
+          branchIds: params.branchIds,
           storageType: params.storageType,
           warehouseId: params.warehouseId,
           itemCode: params.itemCode,
@@ -303,12 +312,14 @@ export class StocksService {
 
   async exportStocks(params: {
     companyId: string;
+    branchIds?: string[] | null;
     storageType?: StorageType;
     itemCode?: string;
     expirySoon?: 7 | 14 | 30 | 60 | 90;
   }) {
     const rows = await this.listRows({
       companyId: params.companyId,
+      branchIds: params.branchIds,
       storageType: params.storageType,
       itemCode: params.itemCode,
       expirySoon: params.expirySoon,
@@ -494,14 +505,22 @@ export class StocksService {
     onHand: number;
     reserved: number;
     memo?: string;
+    branchIds?: string[] | null;
   }) {
-    const { companyId, actorUserId, stockId, onHand, reserved, memo } = params;
+    const { companyId, actorUserId, stockId, onHand, reserved, memo, branchIds } =
+      params;
     if (onHand < 0 || reserved < 0) {
       throw new BadRequestException('수량은 0 이상이어야 합니다.');
     }
 
     const current = await this.prisma.stock.findFirst({
-      where: { id: stockId, companyId },
+      where: {
+        id: stockId,
+        companyId,
+        ...(branchIds?.length && {
+          warehouse: { branchId: { in: branchIds } },
+        }),
+      },
       select: {
         id: true,
         warehouseId: true,

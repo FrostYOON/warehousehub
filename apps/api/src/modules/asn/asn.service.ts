@@ -12,12 +12,18 @@ import { ListAsnQueryDto } from './dto/list-asn-query.dto';
 export class AsnService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(companyId: string, query: ListAsnQueryDto) {
+  async list(companyId: string, query: ListAsnQueryDto, branchIds?: string[] | null) {
     const { status, toBranchId, toWarehouseId } = query;
     const where: Prisma.AsnWhereInput = { companyId };
     if (status) where.status = status;
     if (toBranchId) where.toBranchId = toBranchId;
     if (toWarehouseId) where.toWarehouseId = toWarehouseId;
+    if (branchIds?.length) {
+      where.OR = [
+        { fromBranchId: { in: branchIds } },
+        { toBranchId: { in: branchIds } },
+      ];
+    }
 
     return this.prisma.asn.findMany({
       where,
@@ -37,9 +43,16 @@ export class AsnService {
     });
   }
 
-  async findById(companyId: string, id: string) {
+  async findById(companyId: string, id: string, branchIds?: string[] | null) {
+    const where: Prisma.AsnWhereInput = { id, companyId };
+    if (branchIds?.length) {
+      where.OR = [
+        { fromBranchId: { in: branchIds } },
+        { toBranchId: { in: branchIds } },
+      ];
+    }
     const asn = await this.prisma.asn.findFirst({
-      where: { id, companyId },
+      where,
       include: {
         fromBranch: { select: { id: true, name: true, code: true } },
         fromWarehouse: { select: { id: true, name: true, type: true } },

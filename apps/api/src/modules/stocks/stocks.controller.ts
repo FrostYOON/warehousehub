@@ -24,6 +24,7 @@ import { Role, StorageType } from '@prisma/client';
 
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { UserBranchAccessService } from '../users/user-branch-access.service';
 import { StocksService } from './stocks.service';
 import { StocksQueryDto } from './dto/query-validation.dto';
 import {
@@ -39,7 +40,10 @@ import { UpdateStockDto } from './dto/update-stock.dto';
 @Roles(Role.ADMIN, Role.WH_MANAGER, Role.DELIVERY, Role.ACCOUNTING, Role.SALES)
 @Controller('stocks')
 export class StocksController {
-  constructor(private readonly stocks: StocksService) {}
+  constructor(
+    private readonly stocks: StocksService,
+    private readonly userBranchAccess: UserBranchAccessService,
+  ) {}
 
   @Get()
   @ApiQuery({ name: 'storageType', enum: StorageType, required: false })
@@ -64,11 +68,16 @@ export class StocksController {
       ],
     },
   })
-  list(@Req() req: Request, @Query() query: StocksQueryDto) {
+  async list(@Req() req: Request, @Query() query: StocksQueryDto) {
     const { storageType, warehouseId, itemCode, expirySoon, page, pageSize } =
       query;
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      req.user!.companyId,
+      req.user!.userId,
+    );
     return this.stocks.list({
       companyId: req.user!.companyId,
+      branchIds,
       storageType,
       warehouseId,
       itemCode,
@@ -88,8 +97,13 @@ export class StocksController {
     @Res() res: Response,
     @Query() query: StocksQueryDto,
   ) {
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      req.user!.companyId,
+      req.user!.userId,
+    );
     const file = await this.stocks.exportStocks({
       companyId: req.user!.companyId,
+      branchIds,
       storageType: query.storageType,
       itemCode: query.itemCode,
       expirySoon: query.expirySoon,
@@ -123,11 +137,15 @@ export class StocksController {
   @Patch(':stockId')
   @Roles(Role.ADMIN)
   @ApiParam({ name: 'stockId', type: String })
-  updateStock(
+  async updateStock(
     @Req() req: Request,
     @Param('stockId') stockId: string,
     @Body() dto: UpdateStockDto,
   ) {
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      req.user!.companyId,
+      req.user!.userId,
+    );
     return this.stocks.updateStock({
       companyId: req.user!.companyId,
       actorUserId: req.user!.userId,
@@ -135,6 +153,7 @@ export class StocksController {
       onHand: dto.onHand,
       reserved: dto.reserved,
       memo: dto.memo,
+      branchIds,
     });
   }
 }

@@ -2,6 +2,7 @@ import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
+import { UserBranchAccessService } from '../users/user-branch-access.service';
 import { WarehousesService } from './warehouses.service';
 
 @ApiTags('Warehouses')
@@ -9,7 +10,10 @@ import { WarehousesService } from './warehouses.service';
 @UseGuards(AuthGuard('jwt'))
 @Controller('warehouses')
 export class WarehousesController {
-  constructor(private readonly warehouses: WarehousesService) {}
+  constructor(
+    private readonly warehouses: WarehousesService,
+    private readonly userBranchAccess: UserBranchAccessService,
+  ) {}
 
   @Get()
   @ApiOkResponse({
@@ -21,8 +25,12 @@ export class WarehousesController {
       ],
     },
   })
-  list(@Req() req: Request) {
-    const { companyId } = req.user!;
-    return this.warehouses.list(companyId);
+  async list(@Req() req: Request) {
+    const { companyId, userId } = req.user!;
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      companyId,
+      userId,
+    );
+    return this.warehouses.list(companyId, branchIds);
   }
 }

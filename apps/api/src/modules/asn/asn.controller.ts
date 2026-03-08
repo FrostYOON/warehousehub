@@ -16,6 +16,7 @@ import type { Request } from 'express';
 
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { UserBranchAccessService } from '../users/user-branch-access.service';
 import { AsnService } from './asn.service';
 import { CreateAsnDto } from './dto/create-asn.dto';
 import { ListAsnQueryDto } from './dto/list-asn-query.dto';
@@ -25,20 +26,31 @@ import { ListAsnQueryDto } from './dto/list-asn-query.dto';
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('asn')
 export class AsnController {
-  constructor(private readonly asn: AsnService) {}
+  constructor(
+    private readonly asn: AsnService,
+    private readonly userBranchAccess: UserBranchAccessService,
+  ) {}
 
   @Get()
   @Roles(Role.ADMIN, Role.WH_MANAGER)
   @ApiOkResponse({ description: '입고 예정 목록' })
-  list(@Req() req: Request, @Query() query: ListAsnQueryDto) {
-    return this.asn.list(req.user!.companyId, query);
+  async list(@Req() req: Request, @Query() query: ListAsnQueryDto) {
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      req.user!.companyId,
+      req.user!.userId,
+    );
+    return this.asn.list(req.user!.companyId, query, branchIds);
   }
 
   @Get(':id')
   @Roles(Role.ADMIN, Role.WH_MANAGER)
   @ApiOkResponse({ description: '입고 예정 상세' })
-  get(@Req() req: Request, @Param('id') id: string) {
-    return this.asn.findById(req.user!.companyId, id);
+  async get(@Req() req: Request, @Param('id') id: string) {
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      req.user!.companyId,
+      req.user!.userId,
+    );
+    return this.asn.findById(req.user!.companyId, id, branchIds);
   }
 
   @Post()
