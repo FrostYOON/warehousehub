@@ -11,9 +11,12 @@ import { CreateBranchDto } from './dto/create-branch.dto';
 export class BranchesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(companyId: string) {
+  async list(companyId: string, branchIds?: string[] | null) {
     return this.prisma.branch.findMany({
-      where: { companyId },
+      where: {
+        companyId,
+        ...(branchIds?.length && { id: { in: branchIds } }),
+      },
       orderBy: [{ name: 'asc' }],
       include: {
         _count: { select: { warehouses: true } },
@@ -21,7 +24,7 @@ export class BranchesService {
     });
   }
 
-  async findById(companyId: string, id: string) {
+  async findById(companyId: string, id: string, branchIds?: string[] | null) {
     const branch = await this.prisma.branch.findFirst({
       where: { id, companyId },
       include: {
@@ -37,6 +40,9 @@ export class BranchesService {
       },
     });
     if (!branch) throw new NotFoundException('지사를 찾을 수 없습니다.');
+    if (branchIds?.length && !branchIds.includes(branch.id)) {
+      throw new NotFoundException('지사를 찾을 수 없습니다.');
+    }
     return branch;
   }
 

@@ -88,7 +88,11 @@ export class TransfersService {
     });
   }
 
-  async list(companyId: string, query: ListTransfersQueryDto) {
+  async list(
+    companyId: string,
+    query: ListTransfersQueryDto,
+    branchIds?: string[] | null,
+  ) {
     const { status, fromWarehouseId, toWarehouseId, page = 1, pageSize = 20 } =
       query;
     const skip = (Math.max(1, page) - 1) * Math.min(50, Math.max(1, pageSize));
@@ -98,6 +102,12 @@ export class TransfersService {
     if (status) where.status = status;
     if (fromWarehouseId) where.fromWarehouseId = fromWarehouseId;
     if (toWarehouseId) where.toWarehouseId = toWarehouseId;
+    if (branchIds?.length) {
+      where.AND = [
+        { fromWarehouse: { branchId: { in: branchIds } } },
+        { toWarehouse: { branchId: { in: branchIds } } },
+      ];
+    }
 
     const [items, total] = await Promise.all([
       this.prisma.transfer.findMany({
@@ -133,9 +143,16 @@ export class TransfersService {
     };
   }
 
-  async getOne(companyId: string, id: string) {
+  async getOne(companyId: string, id: string, branchIds?: string[] | null) {
+    const where: Prisma.TransferWhereInput = { id, companyId };
+    if (branchIds?.length) {
+      where.AND = [
+        { fromWarehouse: { branchId: { in: branchIds } } },
+        { toWarehouse: { branchId: { in: branchIds } } },
+      ];
+    }
     const transfer = await this.prisma.transfer.findFirst({
-      where: { id, companyId },
+      where,
       include: {
         fromWarehouse: { select: { id: true, name: true, type: true } },
         toWarehouse: { select: { id: true, name: true, type: true } },

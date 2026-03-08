@@ -16,6 +16,7 @@ import type { Request } from 'express';
 
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { UserBranchAccessService } from '../users/user-branch-access.service';
 import { TransfersService } from './transfers.service';
 import { CreateTransferDto } from './dto/create-transfer.dto';
 import { ListTransfersQueryDto } from './dto/list-transfers-query.dto';
@@ -26,7 +27,10 @@ import { ListTransfersQueryDto } from './dto/list-transfers-query.dto';
 @Roles(Role.ADMIN, Role.WH_MANAGER)
 @Controller('transfers')
 export class TransfersController {
-  constructor(private readonly transfers: TransfersService) {}
+  constructor(
+    private readonly transfers: TransfersService,
+    private readonly userBranchAccess: UserBranchAccessService,
+  ) {}
 
   @Post()
   @ApiOkResponse({
@@ -59,8 +63,12 @@ export class TransfersController {
       },
     },
   })
-  list(@Req() req: Request, @Query() query: ListTransfersQueryDto) {
-    return this.transfers.list(req.user!.companyId, query);
+  async list(@Req() req: Request, @Query() query: ListTransfersQueryDto) {
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      req.user!.companyId,
+      req.user!.userId,
+    );
+    return this.transfers.list(req.user!.companyId, query, branchIds);
   }
 
   @Get(':id')
@@ -75,8 +83,12 @@ export class TransfersController {
       },
     },
   })
-  getOne(@Req() req: Request, @Param('id') id: string) {
-    return this.transfers.getOne(req.user!.companyId, id);
+  async getOne(@Req() req: Request, @Param('id') id: string) {
+    const branchIds = await this.userBranchAccess.getUserBranchIds(
+      req.user!.companyId,
+      req.user!.userId,
+    );
+    return this.transfers.getOne(req.user!.companyId, id, branchIds);
   }
 
   @Patch(':id/confirm')

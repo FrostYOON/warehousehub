@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StocksController } from './stocks.controller';
 import { StocksService } from './stocks.service';
+import { UserBranchAccessService } from '../users/user-branch-access.service';
 import { StorageType } from '@prisma/client';
 
 describe('StocksController', () => {
@@ -11,11 +12,21 @@ describe('StocksController', () => {
     itemTrend: jest.fn(),
     updateStock: jest.fn(),
   };
+  const userBranchAccessMock = {
+    getUserBranchIds: jest.fn().mockResolvedValue(null),
+  };
 
   beforeEach(async () => {
+    userBranchAccessMock.getUserBranchIds.mockResolvedValue(null);
     const module: TestingModule = await Test.createTestingModule({
       controllers: [StocksController],
-      providers: [{ provide: StocksService, useValue: stocksServiceMock }],
+      providers: [
+        { provide: StocksService, useValue: stocksServiceMock },
+        {
+          provide: UserBranchAccessService,
+          useValue: userBranchAccessMock,
+        },
+      ],
     }).compile();
 
     controller = module.get<StocksController>(StocksController);
@@ -26,7 +37,9 @@ describe('StocksController', () => {
   });
 
   it('forwards companyId and query filters to service', async () => {
-    const req = { user: { companyId: 'company-1' } } as never;
+    const req = {
+      user: { companyId: 'company-1', userId: 'user-1' },
+    } as never;
     const query = {
       storageType: StorageType.DRY,
       itemCode: 'A001',
@@ -39,6 +52,7 @@ describe('StocksController', () => {
 
     expect(stocksServiceMock.list).toHaveBeenCalledWith({
       companyId: 'company-1',
+      branchIds: null,
       storageType: StorageType.DRY,
       itemCode: 'A001',
       page: 2,
@@ -88,6 +102,7 @@ describe('StocksController', () => {
       onHand: 10.5,
       reserved: 2,
       memo: '실사 보정',
+      branchIds: null,
     });
   });
 });
