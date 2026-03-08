@@ -125,3 +125,22 @@ export type UserAuditLogItem = {
 export type UserAuditLogsResponse = {
   items: UserAuditLogItem[];
 };
+
+export type CompanyAuditLogItem = {
+  id: string;
+  userId: string;
+  actorUserId: string;
+  action: string;
+  beforeValue: string | null;
+  afterValue: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string };
+  actorUser: { id: string; name: string; email: string };
+};
+
+export type CompanyAuditLogsResponse = {
+  items: CompanyAuditLogItem[];
+  total: number;
+  page: number;
+  limit: number;
+};

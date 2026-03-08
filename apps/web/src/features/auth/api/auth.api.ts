@@ -221,3 +221,45 @@ export async function getUserAuditLogs(
   const res = await httpClient.get(`/users/${userId}/audit-logs`);
   return res.data;
 }
+
+export type ListCompanyAuditLogsParams = {
+  action?: string;
+  userId?: string;
+  actorUserId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  limit?: number;
+};
+
+export async function listCompanyAuditLogs(
+  params: ListCompanyAuditLogsParams,
+): Promise<import('@/features/auth/model/types').CompanyAuditLogsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params.action) searchParams.set('action', params.action);
+  if (params.userId) searchParams.set('userId', params.userId);
+  if (params.actorUserId) searchParams.set('actorUserId', params.actorUserId);
+  if (params.from) searchParams.set('from', params.from);
+  if (params.to) searchParams.set('to', params.to);
+  if (params.page) searchParams.set('page', String(params.page));
+  if (params.limit) searchParams.set('limit', String(params.limit));
+  const q = searchParams.toString();
+  const res = await httpClient.get(`/users/audit-logs${q ? `?${q}` : ''}`);
+  return res.data;
+}
+
+export async function exportCompanyAuditLogs(
+  params: Omit<ListCompanyAuditLogsParams, 'page' | 'limit'>,
+): Promise<Blob> {
+  const searchParams = new URLSearchParams();
+  if (params.action) searchParams.set('action', params.action);
+  if (params.userId) searchParams.set('userId', params.userId);
+  if (params.actorUserId) searchParams.set('actorUserId', params.actorUserId);
+  if (params.from) searchParams.set('from', params.from);
+  if (params.to) searchParams.set('to', params.to);
+  const q = searchParams.toString();
+  const res = await httpClient.get(`/users/audit-logs/export${q ? `?${q}` : ''}`, {
+    responseType: 'blob',
+  });
+  return res.data as Blob;
+}

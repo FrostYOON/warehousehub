@@ -113,6 +113,11 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
         description: '멤버 관리',
         href: '/members',
       },
+      {
+        label: '감사 로그',
+        description: '검색·엑셀 Export',
+        href: '/audit-logs',
+      },
     );
   }
 

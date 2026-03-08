@@ -8,6 +8,8 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { Role, StorageType } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
+import { Prisma } from '@prisma/client';
+import ExcelJS from 'exceljs';
 import { getModuleLogger } from '../../common/logging/module-logger';
 
 const logger = getModuleLogger('UsersService');
@@ -573,6 +575,151 @@ export class UsersService {
       },
     });
     return { items: logs };
+  }
+
+  async listCompanyAuditLogs(
+    companyId: string,
+    params: {
+      action?: string;
+      userId?: string;
+      actorUserId?: string;
+      from?: string;
+      to?: string;
+      page?: number;
+      limit?: number;
+    },
+  ) {
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.UserAuditLogWhereInput = {
+      user: { companyId },
+    };
+
+    if (params.action?.trim()) {
+      where.action = { contains: params.action.trim(), mode: 'insensitive' };
+    }
+    if (params.userId?.trim()) {
+      where.userId = params.userId.trim();
+    }
+    if (params.actorUserId?.trim()) {
+      where.actorUserId = params.actorUserId.trim();
+    }
+    if (params.from || params.to) {
+      const dateFilter: Prisma.DateTimeFilter = {};
+      if (params.from) dateFilter.gte = new Date(params.from);
+      if (params.to) {
+        const toDate = new Date(params.to);
+        toDate.setHours(23, 59, 59, 999);
+        dateFilter.lte = toDate;
+      }
+      where.createdAt = dateFilter;
+    }
+
+    const [logs, total] = await Promise.all([
+      this.prisma.userAuditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          actorUser: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      this.prisma.userAuditLog.count({ where }),
+    ]);
+
+    return {
+      items: logs.map((l) => ({
+        id: l.id,
+        userId: l.userId,
+        actorUserId: l.actorUserId,
+        action: l.action,
+        beforeValue: l.beforeValue,
+        afterValue: l.afterValue,
+        createdAt: l.createdAt.toISOString(),
+        user: l.user,
+        actorUser: l.actorUser,
+      })),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async exportCompanyAuditLogs(
+    companyId: string,
+    params: {
+      action?: string;
+      userId?: string;
+      actorUserId?: string;
+      from?: string;
+      to?: string;
+    },
+  ): Promise<Buffer> {
+    const where: Prisma.UserAuditLogWhereInput = {
+      user: { companyId },
+    };
+
+    if (params.action?.trim()) {
+      where.action = { contains: params.action.trim(), mode: 'insensitive' };
+    }
+    if (params.userId?.trim()) {
+      where.userId = params.userId.trim();
+    }
+    if (params.actorUserId?.trim()) {
+      where.actorUserId = params.actorUserId.trim();
+    }
+    if (params.from || params.to) {
+      const dateFilter: Prisma.DateTimeFilter = {};
+      if (params.from) dateFilter.gte = new Date(params.from);
+      if (params.to) {
+        const toDate = new Date(params.to);
+        toDate.setHours(23, 59, 59, 999);
+        dateFilter.lte = toDate;
+      }
+      where.createdAt = dateFilter;
+    }
+
+    const logs = await this.prisma.userAuditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 10000,
+      include: {
+        user: { select: { name: true, email: true } },
+        actorUser: { select: { name: true, email: true } },
+      },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const ws = workbook.addWorksheet('감사로그');
+    ws.columns = [
+      { header: '일시', key: 'createdAt', width: 20 },
+      { header: '액션', key: 'action', width: 16 },
+      { header: '대상(이름)', key: 'targetName', width: 14 },
+      { header: '대상(이메일)', key: 'targetEmail', width: 22 },
+      { header: '실행자(이름)', key: 'actorName', width: 14 },
+      { header: '실행자(이메일)', key: 'actorEmail', width: 22 },
+      { header: '이전값', key: 'beforeValue', width: 30 },
+      { header: '이후값', key: 'afterValue', width: 30 },
+    ];
+    ws.addRows(
+      logs.map((l) => ({
+        createdAt: l.createdAt.toISOString(),
+        action: l.action,
+        targetName: l.user.name,
+        targetEmail: l.user.email,
+        actorName: l.actorUser.name,
+        actorEmail: l.actorUser.email,
+        beforeValue: l.beforeValue ?? '',
+        afterValue: l.afterValue ?? '',
+      })),
+    );
+
+    const buf = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buf);
   }
 
   async bulkDeactivate(
