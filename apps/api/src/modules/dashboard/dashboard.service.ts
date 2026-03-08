@@ -128,6 +128,8 @@ export type DashboardSummaryResponse = {
       returnQty: number;
       returnRate: number;
     }>;
+    prevOutboundTotal: number;
+    prevReturnTotal: number;
   };
   kpis: {
     totalItems: number;
@@ -135,6 +137,19 @@ export type DashboardSummaryResponse = {
     outboundInProgress: number;
     returnsToday: number;
     approvalPending: number;
+    outboundCompletedToday: number;
+    stockShortageCount: number;
+  };
+  inventoryInsights: {
+    expirySoonCount: number; // 30일 이내 (하위 호환)
+    expiryByDays: {
+      within7: number;
+      within14: number;
+      within30: number;
+      within60: number;
+      within90: number;
+    };
+    shortageCount: number;
   };
   alerts: Array<{
     id: string;
@@ -162,12 +177,31 @@ export class DashboardService {
     segmentBy: DashboardSegmentBy,
     targetReturnRate: number,
   ): Promise<DashboardSummaryResponse> {
-    const normalizedTarget = Number.isFinite(targetReturnRate) ? targetReturnRate : 2;
+    const normalizedTarget = Number.isFinite(targetReturnRate)
+      ? targetReturnRate
+      : 2;
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
     const trendBuckets = buildTrendBuckets(now, range);
     const analysisStart = trendBuckets[0]?.start ?? startOfRange(now, range);
     const previousStart = startOfPreviousWindow(analysisStart, range);
+
+    const addDays = (d: Date, n: number) => {
+      const r = new Date(d);
+      r.setDate(r.getDate() + n);
+      return r;
+    };
+    const d7 = addDays(startOfToday, 7);
+    const d14 = addDays(startOfToday, 14);
+    const d30 = addDays(startOfToday, 30);
+    const d60 = addDays(startOfToday, 60);
+    const d90 = addDays(startOfToday, 90);
+    const endOfToday = new Date(startOfToday);
+    endOfToday.setDate(endOfToday.getDate() + 1);
 
     const [
       totalItems,
@@ -175,12 +209,21 @@ export class DashboardService {
       outboundInProgress,
       returnsToday,
       approvalPending,
+      outboundCompletedToday,
+      temperatureRecordedToday,
+      stockShortageGroups,
+      expiryWithin7,
+      expiryWithin14,
+      expiryWithin30,
+      expiryWithin60,
+      expiryWithin90,
       inboundInvalidPending,
       overdueOutbound,
       returnsDecidedPending,
       outboundLines,
       returnLines,
       previousOutboundLines,
+      previousReturnLines,
       customerSegmentOutboundLines,
       customerSegmentReturnLines,
       warehouseSegmentOutboundAllocations,
@@ -209,6 +252,74 @@ export class DashboardService {
       }),
       this.prisma.user.count({
         where: { companyId, isActive: false },
+      }),
+      this.prisma.outboundOrder.count({
+        where: {
+          companyId,
+          status: OutboundStatus.DELIVERED,
+          deliveredAt: { gte: startOfToday, lt: endOfToday },
+        },
+      }),
+      this.prisma.temperatureLog.count({
+        where: {
+          companyId,
+          createdAt: { gte: startOfToday, lt: endOfToday },
+        },
+      }),
+      this.prisma.stock.groupBy({
+        by: ['lotId'],
+        where: { companyId },
+        _sum: { onHand: true },
+      }),
+      this.prisma.lot.count({
+        where: {
+          companyId,
+          expiryDate: {
+            not: null,
+            gte: startOfToday,
+            lt: d7,
+          },
+        },
+      }),
+      this.prisma.lot.count({
+        where: {
+          companyId,
+          expiryDate: {
+            not: null,
+            gte: d7,
+            lt: d14,
+          },
+        },
+      }),
+      this.prisma.lot.count({
+        where: {
+          companyId,
+          expiryDate: {
+            not: null,
+            gte: d14,
+            lt: d30,
+          },
+        },
+      }),
+      this.prisma.lot.count({
+        where: {
+          companyId,
+          expiryDate: {
+            not: null,
+            gte: d30,
+            lt: d60,
+          },
+        },
+      }),
+      this.prisma.lot.count({
+        where: {
+          companyId,
+          expiryDate: {
+            not: null,
+            gte: d60,
+            lt: d90,
+          },
+        },
       }),
       this.prisma.inboundUpload.count({
         where: {
@@ -291,6 +402,13 @@ export class DashboardService {
           },
         },
       }),
+      this.prisma.returnReceiptLine.findMany({
+        where: {
+          receipt: { companyId },
+          processedAt: { gte: previousStart, lt: analysisStart },
+        },
+        select: { qty: true },
+      }),
       this.prisma.outboundLine.findMany({
         where: {
           order: {
@@ -356,8 +474,13 @@ export class DashboardService {
       }),
     ]);
 
-    const alertsById = new Map<string, DashboardSummaryResponse['alerts'][number]>();
-    if (inboundInvalidPending >= DASHBOARD_ALERT_MIN_VALUE.inboundInvalidPending) {
+    const alertsById = new Map<
+      string,
+      DashboardSummaryResponse['alerts'][number]
+    >();
+    if (
+      inboundInvalidPending >= DASHBOARD_ALERT_MIN_VALUE.inboundInvalidPending
+    ) {
       alertsById.set('inbound-invalid-pending', {
         id: 'inbound-invalid-pending',
         level: 'warning',
@@ -375,7 +498,9 @@ export class DashboardService {
         href: '/outbound',
       });
     }
-    if (returnsDecidedPending >= DASHBOARD_ALERT_MIN_VALUE.returnsDecidedPending) {
+    if (
+      returnsDecidedPending >= DASHBOARD_ALERT_MIN_VALUE.returnsDecidedPending
+    ) {
       alertsById.set('returns-decided-pending', {
         id: 'returns-decided-pending',
         level: 'info',
@@ -386,7 +511,8 @@ export class DashboardService {
     }
     const alerts = Array.from(alertsById.values());
     alerts.sort((a, b) => {
-      const levelGap = ALERT_LEVEL_PRIORITY[b.level] - ALERT_LEVEL_PRIORITY[a.level];
+      const levelGap =
+        ALERT_LEVEL_PRIORITY[b.level] - ALERT_LEVEL_PRIORITY[a.level];
       if (levelGap !== 0) return levelGap;
       return b.value - a.value;
     });
@@ -395,21 +521,29 @@ export class DashboardService {
     if (role === Role.ADMIN || role === Role.WH_MANAGER) {
       todos.push({
         id: 'todo-inbound-confirm',
-        label: '입고 확정 대기',
+        label: '입고 확정',
         value: inboundPending,
         href: '/inbound',
       });
       todos.push({
         id: 'todo-returns-decide',
-        label: '반품 판정/처리 대기',
+        label: '반품 결정 → 반품',
         value: returnsDecidedPending,
         href: '/returns',
+      });
+    }
+    if (role === Role.ADMIN || role === Role.WH_MANAGER) {
+      todos.push({
+        id: 'todo-temperature-record',
+        label: '오늘 온도 기록 (COOL/FRZ)',
+        value: temperatureRecordedToday > 0 ? 0 : 1,
+        href: '/temperature-monitor',
       });
     }
     if (role === Role.ADMIN || role === Role.DELIVERY) {
       todos.push({
         id: 'todo-outbound-shipping',
-        label: '배송 작업 대기',
+        label: '피킹 대기 → 출고',
         value: outboundInProgress,
         href: '/outbound',
       });
@@ -417,7 +551,7 @@ export class DashboardService {
     if (role === Role.ADMIN) {
       todos.push({
         id: 'todo-approvals',
-        label: '회원 승인 대기',
+        label: '회원 승인',
         value: approvalPending,
         href: '/approvals',
       });
@@ -471,7 +605,9 @@ export class DashboardService {
 
     const itemMetrics = Array.from(metricByItem.values()).map((metric) => {
       const returnRate =
-        metric.outboundQty > 0 ? (metric.returnQty / metric.outboundQty) * 100 : 0;
+        metric.outboundQty > 0
+          ? (metric.returnQty / metric.outboundQty) * 100
+          : 0;
       return {
         ...metric,
         outboundQty: Number(metric.outboundQty.toFixed(3)),
@@ -530,7 +666,9 @@ export class DashboardService {
       point.outboundQty = Number(point.outboundQty.toFixed(3));
       point.returnQty = Number(point.returnQty.toFixed(3));
       point.returnRate =
-        point.outboundQty > 0 ? Number(((point.returnQty / point.outboundQty) * 100).toFixed(2)) : 0;
+        point.outboundQty > 0
+          ? Number(((point.returnQty / point.outboundQty) * 100).toFixed(2))
+          : 0;
       point.isOverTarget = point.returnRate > normalizedTarget;
     });
 
@@ -563,8 +701,10 @@ export class DashboardService {
 
     const anomalies = itemMetrics
       .map((metric) => {
-        const previous = previousMap.get(metric.itemId)?.previousOutboundQty ?? 0;
-        const growthRate = previous > 0 ? ((metric.outboundQty - previous) / previous) * 100 : 0;
+        const previous =
+          previousMap.get(metric.itemId)?.previousOutboundQty ?? 0;
+        const growthRate =
+          previous > 0 ? ((metric.outboundQty - previous) / previous) * 100 : 0;
         return {
           itemId: metric.itemId,
           itemCode: metric.itemCode,
@@ -589,9 +729,13 @@ export class DashboardService {
     const returnByItem = [...itemMetrics]
       .filter((item) => item.returnQty > 0)
       .sort((a, b) => b.returnQty - a.returnQty);
-    const totalReturnQty = returnByItem.reduce((sum, item) => sum + item.returnQty, 0);
+    const totalReturnQty = returnByItem.reduce(
+      (sum, item) => sum + item.returnQty,
+      0,
+    );
     let cumulative = 0;
-    const paretoItems: DashboardSummaryResponse['analysis']['pareto']['items'] = [];
+    const paretoItems: DashboardSummaryResponse['analysis']['pareto']['items'] =
+      [];
     returnByItem.forEach((item) => {
       if (totalReturnQty <= 0) return;
       cumulative += item.returnQty;
@@ -614,7 +758,12 @@ export class DashboardService {
     });
     const pareto80 = paretoItems.filter((item) => item.cumulativeShare <= 80);
     const pareto = pareto80.length > 0 ? pareto80 : paretoItems.slice(0, 1);
-    const coverageRate = pareto.length > 0 ? pareto[pareto.length - 1].cumulativeShare : 0;
+    const coverageRate =
+      pareto.length > 0 ? pareto[pareto.length - 1].cumulativeShare : 0;
+
+    const stockShortageCount = stockShortageGroups.filter(
+      (g) => Number(g._sum.onHand ?? 0) < 0,
+    ).length;
 
     return {
       asOf: now.toISOString(),
@@ -633,6 +782,14 @@ export class DashboardService {
         topOutboundItems,
         worstOutboundItems,
         topReturnRateItems,
+        prevOutboundTotal: previousOutboundLines.reduce(
+          (sum, l) => sum + Number(l.deliveredQty.toString()),
+          0,
+        ),
+        prevReturnTotal: previousReturnLines.reduce(
+          (sum, l) => sum + Number(l.qty.toString()),
+          0,
+        ),
       },
       kpis: {
         totalItems,
@@ -640,6 +797,19 @@ export class DashboardService {
         outboundInProgress,
         returnsToday,
         approvalPending,
+        outboundCompletedToday,
+        stockShortageCount,
+      },
+      inventoryInsights: {
+        expirySoonCount: expiryWithin7 + expiryWithin14 + expiryWithin30,
+        expiryByDays: {
+          within7: expiryWithin7,
+          within14: expiryWithin14,
+          within30: expiryWithin30,
+          within60: expiryWithin60,
+          within90: expiryWithin90,
+        },
+        shortageCount: stockShortageCount,
       },
       alerts: alerts.slice(0, DASHBOARD_ALERT_TOP_N),
       todos,
@@ -651,7 +821,11 @@ function startOfRange(now: Date, range: DashboardAnalyticsRange): Date {
   if (range === DashboardAnalyticsRange.WEEK) {
     const day = now.getDay();
     const diffToMonday = (day + 6) % 7;
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday);
+    return new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - diffToMonday,
+    );
   }
   if (range === DashboardAnalyticsRange.QUARTER) {
     const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
@@ -669,11 +843,22 @@ type TrendBucket = {
   end: Date;
 };
 
-function buildTrendBuckets(now: Date, range: DashboardAnalyticsRange): TrendBucket[] {
+function buildTrendBuckets(
+  now: Date,
+  range: DashboardAnalyticsRange,
+): TrendBucket[] {
   if (range === DashboardAnalyticsRange.WEEK) {
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    const start = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - 6,
+    );
     return Array.from({ length: 7 }, (_, idx) => {
-      const bucketStart = new Date(start.getFullYear(), start.getMonth(), start.getDate() + idx);
+      const bucketStart = new Date(
+        start.getFullYear(),
+        start.getMonth(),
+        start.getDate() + idx,
+      );
       const bucketEnd = new Date(
         bucketStart.getFullYear(),
         bucketStart.getMonth(),
@@ -703,10 +888,22 @@ function buildTrendBuckets(now: Date, range: DashboardAnalyticsRange): TrendBuck
   }
 
   const months = range === DashboardAnalyticsRange.HALF ? 6 : 12;
-  const monthStart = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  const monthStart = new Date(
+    now.getFullYear(),
+    now.getMonth() - (months - 1),
+    1,
+  );
   return Array.from({ length: months }, (_, idx) => {
-    const bucketStart = new Date(monthStart.getFullYear(), monthStart.getMonth() + idx, 1);
-    const bucketEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + idx + 1, 1);
+    const bucketStart = new Date(
+      monthStart.getFullYear(),
+      monthStart.getMonth() + idx,
+      1,
+    );
+    const bucketEnd = new Date(
+      monthStart.getFullYear(),
+      monthStart.getMonth() + idx + 1,
+      1,
+    );
     return {
       label: `${bucketStart.getFullYear()}-${String(bucketStart.getMonth() + 1).padStart(2, '0')}`,
       start: bucketStart,
@@ -728,9 +925,16 @@ function startOfWeek(now: Date): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
 }
 
-function startOfPreviousWindow(currentStart: Date, range: DashboardAnalyticsRange): Date {
+function startOfPreviousWindow(
+  currentStart: Date,
+  range: DashboardAnalyticsRange,
+): Date {
   if (range === DashboardAnalyticsRange.WEEK) {
-    return new Date(currentStart.getFullYear(), currentStart.getMonth(), currentStart.getDate() - 7);
+    return new Date(
+      currentStart.getFullYear(),
+      currentStart.getMonth(),
+      currentStart.getDate() - 7,
+    );
   }
   if (range === DashboardAnalyticsRange.QUARTER) {
     const date = new Date(currentStart);
@@ -752,7 +956,10 @@ function buildSegmentComparison(params: {
   }>;
   customerReturns: Array<{
     qty: { toString: () => string };
-    receipt: { customerId: string | null; customer: { customerName: string } | null };
+    receipt: {
+      customerId: string | null;
+      customer: { customerName: string } | null;
+    };
   }>;
   warehouseOutbound: Array<{
     qty: { toString: () => string };

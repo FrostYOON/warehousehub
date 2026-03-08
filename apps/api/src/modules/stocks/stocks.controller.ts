@@ -65,11 +65,14 @@ export class StocksController {
     },
   })
   list(@Req() req: Request, @Query() query: StocksQueryDto) {
-    const { storageType, itemCode, page, pageSize } = query;
+    const { storageType, warehouseId, itemCode, expirySoon, page, pageSize } =
+      query;
     return this.stocks.list({
       companyId: req.user!.companyId,
       storageType,
+      warehouseId,
       itemCode,
+      expirySoon,
       page,
       pageSize,
     });
@@ -80,11 +83,16 @@ export class StocksController {
     'Content-Type',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   )
-  async export(@Req() req: Request, @Res() res: Response, @Query() query: StocksQueryDto) {
+  async export(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Query() query: StocksQueryDto,
+  ) {
     const file = await this.stocks.exportStocks({
       companyId: req.user!.companyId,
       storageType: query.storageType,
       itemCode: query.itemCode,
+      expirySoon: query.expirySoon,
     });
     const fileName = `stocks-${new Date().toISOString().slice(0, 10)}.xlsx`;
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);

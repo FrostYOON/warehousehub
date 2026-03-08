@@ -1,7 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InventoryTxType, Prisma, StorageType } from '@prisma/client';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 type ItemAnalyticsRange = 'WEEK' | 'QUARTER' | 'HALF' | 'YEAR';
 
@@ -98,7 +102,12 @@ function buildBuckets(now: Date, range: ItemAnalyticsRange): TimeBucket[] {
     return Array.from({ length: 8 }, (_, idx) => {
       const start = addMonths(base, (idx - 7) * 3);
       const end = addMonths(start, 3);
-      return { key: start.toISOString(), label: labelForQuarter(start), start, end };
+      return {
+        key: start.toISOString(),
+        label: labelForQuarter(start),
+        start,
+        end,
+      };
     });
   }
 
@@ -107,7 +116,12 @@ function buildBuckets(now: Date, range: ItemAnalyticsRange): TimeBucket[] {
     return Array.from({ length: 6 }, (_, idx) => {
       const start = addMonths(base, (idx - 5) * 6);
       const end = addMonths(start, 6);
-      return { key: start.toISOString(), label: labelForHalf(start), start, end };
+      return {
+        key: start.toISOString(),
+        label: labelForHalf(start),
+        start,
+        end,
+      };
     });
   }
 
@@ -115,7 +129,12 @@ function buildBuckets(now: Date, range: ItemAnalyticsRange): TimeBucket[] {
   return Array.from({ length: 5 }, (_, idx) => {
     const start = addYears(base, idx - 4);
     const end = addYears(start, 1);
-    return { key: start.toISOString(), label: String(start.getFullYear()), start, end };
+    return {
+      key: start.toISOString(),
+      label: String(start.getFullYear()),
+      start,
+      end,
+    };
   });
 }
 
@@ -135,26 +154,56 @@ export class StocksService {
   private stockWhere(params: {
     companyId: string;
     storageType?: StorageType;
+    warehouseId?: string;
     itemCode?: string;
+    expirySoon?: 7 | 14 | 30 | 60 | 90;
   }): Prisma.StockWhereInput {
-    const { companyId, storageType, itemCode } = params;
+    const { companyId, storageType, warehouseId, itemCode, expirySoon } = params;
     const normalizedItemCode = itemCode?.trim() || undefined;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endDate = new Date(today);
+    endDate.setDate(endDate.getDate() + (expirySoon ?? 0));
+    const lotFilter: Prisma.LotWhereInput = normalizedItemCode
+      ? { item: { itemCode: normalizedItemCode } }
+      : {};
+    if (expirySoon) {
+      lotFilter.expiryDate = {
+        not: null,
+        gte: today,
+        lt: endDate,
+      };
+    }
+    const warehouseFilter =
+      warehouseId
+        ? { id: warehouseId }
+        : storageType
+          ? { type: storageType }
+          : undefined;
     return {
       companyId,
-      warehouse: storageType ? { type: storageType } : undefined,
-      lot: normalizedItemCode ? { item: { itemCode: normalizedItemCode } } : undefined,
+      warehouse: warehouseFilter,
+      lot: Object.keys(lotFilter).length ? lotFilter : undefined,
     };
   }
 
   private async listRows(params: {
     companyId: string;
     storageType?: StorageType;
+    warehouseId?: string;
     itemCode?: string;
+    expirySoon?: 7 | 14 | 30 | 60 | 90;
     skip?: number;
     take?: number;
   }) {
     const rows = await this.prisma.stock.findMany({
-      where: this.stockWhere(params),
+      where: this.stockWhere({
+        companyId: params.companyId,
+        storageType: params.storageType,
+        warehouseId: params.warehouseId,
+        itemCode: params.itemCode,
+        expirySoon: params.expirySoon,
+      }),
       orderBy: [
         {
           lot: {
@@ -211,19 +260,23 @@ export class StocksService {
   async list(params: {
     companyId: string;
     storageType?: StorageType;
+    warehouseId?: string;
     itemCode?: string;
+    expirySoon?: 7 | 14 | 30 | 60 | 90;
     page?: number;
     pageSize?: number;
   }) {
     const page = Math.max(1, params.page ?? 1);
-    const pageSize = Math.max(1, Math.min(200, params.pageSize ?? 50));
+    const pageSize = Math.max(1, Math.min(500, params.pageSize ?? 50));
     const skip = (page - 1) * pageSize;
 
     const [items, total] = await Promise.all([
       this.listRows({
         companyId: params.companyId,
         storageType: params.storageType,
+        warehouseId: params.warehouseId,
         itemCode: params.itemCode,
+        expirySoon: params.expirySoon,
         skip,
         take: pageSize,
       }),
@@ -231,7 +284,9 @@ export class StocksService {
         where: this.stockWhere({
           companyId: params.companyId,
           storageType: params.storageType,
+          warehouseId: params.warehouseId,
           itemCode: params.itemCode,
+          expirySoon: params.expirySoon,
         }),
       }),
     ]);
@@ -250,11 +305,13 @@ export class StocksService {
     companyId: string;
     storageType?: StorageType;
     itemCode?: string;
+    expirySoon?: 7 | 14 | 30 | 60 | 90;
   }) {
     const rows = await this.listRows({
       companyId: params.companyId,
       storageType: params.storageType,
       itemCode: params.itemCode,
+      expirySoon: params.expirySoon,
     });
     const exportRows = rows.map((row) => {
       const available = row.onHand - row.reserved;
@@ -263,20 +320,26 @@ export class StocksService {
         창고명: row.warehouse.name,
         품목코드: row.lot.item.itemCode,
         품목명: row.lot.item.itemName,
-        유통기한: row.lot.expiryDate ? row.lot.expiryDate.toISOString().slice(0, 10) : '',
+        유통기한: row.lot.expiryDate
+          ? row.lot.expiryDate.toISOString().slice(0, 10)
+          : '',
         현재고: Number(row.onHand.toFixed(1)),
         예약: Number(row.reserved.toFixed(1)),
         가용: Number(available.toFixed(1)),
         최종수정시각: row.updatedAt.toISOString(),
       };
     });
-    const sheet = XLSX.utils.json_to_sheet(exportRows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, 'Stocks');
-    return XLSX.write(workbook, {
-      type: 'buffer',
-      bookType: 'xlsx',
-    }) as Buffer;
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Stocks');
+    const columns = Object.keys(exportRows[0] ?? {});
+    worksheet.columns = columns.map((key) => ({
+      header: key,
+      key,
+      width: 15,
+    }));
+    worksheet.addRows(exportRows);
+    const buf = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buf);
   }
 
   async listItems(companyId: string, keyword?: string) {
@@ -392,15 +455,24 @@ export class StocksService {
 
     series.forEach((bucket) => {
       bucket.returnRate =
-        bucket.outboundQty > 0 ? (bucket.returnQty / bucket.outboundQty) * 100 : 0;
+        bucket.outboundQty > 0
+          ? (bucket.returnQty / bucket.outboundQty) * 100
+          : 0;
       bucket.outboundQty = Number(bucket.outboundQty.toFixed(3));
       bucket.returnQty = Number(bucket.returnQty.toFixed(3));
       bucket.returnRate = Number(bucket.returnRate.toFixed(2));
     });
 
-    const outboundTotal = series.reduce((sum, bucket) => sum + bucket.outboundQty, 0);
-    const returnTotal = series.reduce((sum, bucket) => sum + bucket.returnQty, 0);
-    const returnRate = outboundTotal > 0 ? (returnTotal / outboundTotal) * 100 : 0;
+    const outboundTotal = series.reduce(
+      (sum, bucket) => sum + bucket.outboundQty,
+      0,
+    );
+    const returnTotal = series.reduce(
+      (sum, bucket) => sum + bucket.returnQty,
+      0,
+    );
+    const returnRate =
+      outboundTotal > 0 ? (returnTotal / outboundTotal) * 100 : 0;
 
     return {
       item,

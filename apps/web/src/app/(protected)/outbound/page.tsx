@@ -1,17 +1,39 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
-import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
+import { exportOutbound } from '@/features/outbound/api/outbound.api';
 import { useOutboundPage } from '@/features/outbound/hooks/use-outbound-page';
+import { useToast } from '@/shared/ui/toast/toast-provider';
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 import type { StorageType } from '@/features/stocks/model/types';
 import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
+import { buildGoogleMapsDirectionUrl } from '@/shared/utils/google-maps';
 import { ActionButton, SortableHeader, StatusBadge } from '@/shared/ui/common';
 
 export default function OutboundPage() {
   const searchParams = useSearchParams();
-  const { me, loggingOut, signOut } = useAuthSession();
+  const { me } = useAuthSession();
+  const { showToast } = useToast();
+
+  const handleExportOutbound = useCallback(async () => {
+    try {
+      const blob = await exportOutbound();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `outbound-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast('출고 엑셀 다운로드를 시작했습니다.', 'success');
+    } catch (error) {
+      showToast(getErrorMessage(error, '엑셀 다운로드에 실패했습니다.'), 'error');
+    }
+  }, [showToast]);
+
   const {
     customers,
     orders,
@@ -72,6 +94,9 @@ export default function OutboundPage() {
     'FRZ',
   ]);
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const [sameDayOnly, setSameDayOnly] = useState(false);
+
+  const canAccessSameDayView = me?.role === 'DELIVERY' || me?.role === 'ADMIN';
 
   const customerDisplayName = (customer?: {
     name?: string;
@@ -182,6 +207,17 @@ export default function OutboundPage() {
       to.setDate(to.getDate() + 1);
       base = base.filter((order) => new Date(order.plannedDate) < to);
     }
+    if (sameDayOnly) {
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(todayStart);
+      todayEnd.setDate(todayEnd.getDate() + 1);
+      base = base.filter(
+        (order) =>
+          new Date(order.plannedDate) >= todayStart &&
+          new Date(order.plannedDate) < todayEnd,
+      );
+    }
     if (
       drilldownFilters.storageType === 'DRY' ||
       drilldownFilters.storageType === 'COOL' ||
@@ -225,6 +261,7 @@ export default function OutboundPage() {
     keyword,
     orders,
     presetStatuses,
+    sameDayOnly,
     sortDir,
     sortKey,
     statusFilter,
@@ -250,23 +287,17 @@ export default function OutboundPage() {
   }, [searchParams, setKeyword, setStatusFilter]);
 
   return (
-    <DashboardShell
-      userName={me?.name ?? '사용자'}
-      companyName={me?.companyName ?? '회사'}
-      onLogout={signOut}
-      loggingOut={loggingOut}
-      menus={buildDashboardMenus(me?.role)}
-    >
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800">출고 오더</h2>
-        <p className="mt-2 text-sm text-slate-600">
+    <>
+      <section className="page-section">
+        <h2 className="page-title">출고 오더</h2>
+        <p className="page-description">
           출고 오더 목록을 확인하고, 상태에 따라 픽/배송 액션을 수행할 수 있습니다.
         </p>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[220px_180px_1fr_auto_auto]">
           <select
             value={newCustomerId}
             onChange={(e) => setNewCustomerId(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="form-select"
           >
             <option value="">고객사 선택</option>
             {customers.map((customer) => (
@@ -279,17 +310,18 @@ export default function OutboundPage() {
             type="date"
             value={newPlannedDate}
             onChange={(e) => setNewPlannedDate(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="form-input"
           />
           <input
             value={newMemo}
             onChange={(e) => setNewMemo(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="form-input"
             placeholder="메모 (선택)"
           />
           <ActionButton
             onClick={() => setIsItemModalOpen(true)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-100"
+            variant="secondary"
+            size="lg"
           >
             품목 선택 ({selectedItemCount})
           </ActionButton>
@@ -416,8 +448,32 @@ export default function OutboundPage() {
         </div>
       )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-slate-800">오더 목록</h3>
+      <section className="page-section">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="page-subtitle">오더 목록</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <ActionButton
+              variant="secondary"
+              size="md"
+              onClick={() => void handleExportOutbound()}
+            >
+              엑셀 다운로드
+            </ActionButton>
+            {canAccessSameDayView && (
+              <button
+                type="button"
+                onClick={() => setSameDayOnly((prev) => !prev)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  sameDayOnly
+                    ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                오늘 배송 {sameDayOnly ? `(${displayedOrders.length})` : ''}
+              </button>
+            )}
+          </div>
+        </div>
         {(drilldownFilters.itemId ||
           drilldownFilters.customerId ||
           drilldownFilters.storageType ||
@@ -431,7 +487,7 @@ export default function OutboundPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-select"
           >
             <option value="">전체 상태</option>
             <option value="DRAFT">DRAFT</option>
@@ -446,7 +502,7 @@ export default function OutboundPage() {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="출고번호 또는 고객사명 검색"
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-input"
           />
         </div>
         {loadingList ? (
@@ -454,9 +510,9 @@ export default function OutboundPage() {
         ) : displayedOrders.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">등록된 출고 오더가 없습니다.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[840px] text-left text-sm">
-              <thead className="text-slate-500">
+          <div className="table-wrapper mt-4">
+            <table className="data-table min-w-[840px]">
+              <thead>
                 <tr>
                   <SortableHeader
                     label="출고번호"
@@ -464,7 +520,6 @@ export default function OutboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={toggleOutboundSort}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="고객사"
@@ -472,7 +527,6 @@ export default function OutboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={toggleOutboundSort}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="상태"
@@ -480,7 +534,6 @@ export default function OutboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={toggleOutboundSort}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="출고예정일"
@@ -488,7 +541,6 @@ export default function OutboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={toggleOutboundSort}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="라인 수"
@@ -496,26 +548,25 @@ export default function OutboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={toggleOutboundSort}
-                    className="px-2 py-2"
                   />
-                  <th className="px-2 py-2">상세</th>
+                  <th>상세</th>
                 </tr>
               </thead>
               <tbody>
                 {displayedOrders.map((order) => (
-                  <tr key={order.id} className="border-t border-slate-100">
-                    <td className="px-2 py-2 font-medium text-slate-700">
+                  <tr key={order.id}>
+                    <td className="font-medium text-slate-700">
                       {outboundDisplayNo(order)}
                     </td>
-                    <td className="px-2 py-2">{customerDisplayName(order.customer)}</td>
-                    <td className="px-2 py-2">
+                    <td>{customerDisplayName(order.customer)}</td>
+                    <td>
                       <StatusBadge status={order.status} />
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       {new Date(order.plannedDate).toLocaleDateString()}
                     </td>
-                    <td className="px-2 py-2">{order.lines.length}</td>
-                    <td className="px-2 py-2">
+                    <td>{order.lines.length}</td>
+                    <td>
                       <button
                         type="button"
                         onClick={() => void loadOrderDetail(order.id)}
@@ -532,10 +583,24 @@ export default function OutboundPage() {
         )}
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="page-section">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-slate-800">오더 상세</h3>
-          <div className="flex flex-wrap gap-2">
+          <h3 className="page-subtitle">오더 상세</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedOrder?.customer &&
+              (() => {
+                const mapsUrl = buildGoogleMapsDirectionUrl(selectedOrder.customer);
+                return mapsUrl ? (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-9 items-center rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  >
+                    지도에서 보기
+                  </a>
+                ) : null;
+              })()}
             <ActionButton
               onClick={() => void submitPick()}
               disabled={!canSubmitPick(selectedOrder) || actionLoading !== null}
@@ -582,36 +647,46 @@ export default function OutboundPage() {
               </p>
               <p>고객사: {customerDisplayName(selectedOrder.customer)}</p>
               <p>메모: {selectedOrder.memo ?? '-'}</p>
+              {buildGoogleMapsDirectionUrl(selectedOrder.customer) && (
+                <p className="mt-2">
+                  <a
+                    href={buildGoogleMapsDirectionUrl(selectedOrder.customer)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    <span aria-hidden>📍</span> 길찾기 (지도에서 보기)
+                  </a>
+                </p>
+              )}
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left text-sm">
-                <thead className="text-slate-500">
+            <div className="table-wrapper">
+              <table className="data-table min-w-[860px]">
+                <thead>
                   <tr>
-                    <th className="px-2 py-2">라인ID</th>
-                    <th className="px-2 py-2">품목코드</th>
-                    <th className="px-2 py-2">품목명</th>
-                    <th className="px-2 py-2">요청수량</th>
-                    <th className="px-2 py-2">픽수량</th>
-                    <th className="px-2 py-2">배송수량</th>
-                    <th className="px-2 py-2">완료수량</th>
-                    <th className="px-2 py-2">상태</th>
-                    <th className="px-2 py-2">라인 작업</th>
+                    <th>품목코드</th>
+                    <th>품목명</th>
+                    <th>요청수량</th>
+                    <th>픽수량</th>
+                    <th>배송수량</th>
+                    <th>완료수량</th>
+                    <th>상태</th>
+                    <th>라인 작업</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selectedOrder.lines.map((line) => (
-                    <tr key={line.id} className="border-t border-slate-100">
-                      <td className="px-2 py-2 text-xs text-slate-600">{line.id}</td>
-                      <td className="px-2 py-2">{line.item?.itemCode ?? '-'}</td>
-                      <td className="px-2 py-2">{line.item?.itemName ?? '-'}</td>
-                      <td className="px-2 py-2">{formatDecimalForDisplay(line.requestedQty)}</td>
-                      <td className="px-2 py-2">{formatDecimalForDisplay(line.pickedQty)}</td>
-                      <td className="px-2 py-2">{formatDecimalForDisplay(line.shippedQty)}</td>
-                      <td className="px-2 py-2">{formatDecimalForDisplay(line.deliveredQty)}</td>
-                      <td className="px-2 py-2">
+                    <tr key={line.id}>
+                      <td>{line.item?.itemCode ?? '-'}</td>
+                      <td>{line.item?.itemName ?? '-'}</td>
+                      <td>{formatDecimalForDisplay(line.requestedQty)}</td>
+                      <td>{formatDecimalForDisplay(line.pickedQty)}</td>
+                      <td>{formatDecimalForDisplay(line.shippedQty)}</td>
+                      <td>{formatDecimalForDisplay(line.deliveredQty)}</td>
+                      <td>
                         <StatusBadge status={line.status} />
                       </td>
-                      <td className="px-2 py-2">
+                      <td>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
@@ -622,7 +697,7 @@ export default function OutboundPage() {
                               setLineQtyMap((prev) => ({ ...prev, [line.id]: e.target.value }))
                             }
                             disabled={!canEditOrder(selectedOrder) || line.status === 'CANCELLED'}
-                            className="h-8 w-24 rounded-md border border-slate-300 px-2 text-xs"
+                            className="form-input h-8 w-24 px-2 text-xs"
                           />
                           <ActionButton
                             onClick={() => void updateLineQty(line.id)}
@@ -659,7 +734,7 @@ export default function OutboundPage() {
                 <input
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
-                  className="h-9 flex-1 rounded-md border border-slate-300 px-3 text-sm"
+                  className="form-input h-9 flex-1 px-3"
                   placeholder="취소 사유 (선택)"
                 />
                 <ActionButton
@@ -673,6 +748,6 @@ export default function OutboundPage() {
           </div>
         )}
       </section>
-    </DashboardShell>
+    </>
   );
 }

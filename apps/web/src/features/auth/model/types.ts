@@ -14,6 +14,14 @@ export type SignupRequest = {
   role: Exclude<UserRole, 'ADMIN'>;
 };
 
+/** Admin(신규 회사 최초 관리자) 회원가입 - POST /auth/register */
+export type RegisterRequest = {
+  companyName: string;
+  name: string;
+  email: string;
+  password: string;
+};
+
 export type LoginCompany = {
   id: string;
   name: string;

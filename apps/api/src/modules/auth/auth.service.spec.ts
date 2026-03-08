@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { comparePassword } from '../../common/utils/password.util';
@@ -39,6 +40,9 @@ describe('AuthService', () => {
   const jwtMock = {
     signAsync: jest.fn(),
   };
+  const mailMock = {
+    send: jest.fn().mockResolvedValue(true),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -51,6 +55,7 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: prismaMock },
         { provide: UsersService, useValue: usersMock },
         { provide: JwtService, useValue: jwtMock },
+        { provide: MailService, useValue: mailMock },
       ],
     }).compile();
 
@@ -292,7 +297,10 @@ describe('AuthService', () => {
         },
       ]);
 
-      const result = await service.listDeviceSessions('user-1', 'refresh-token');
+      const result = await service.listDeviceSessions(
+        'user-1',
+        'refresh-token',
+      );
 
       const calls = prismaMock.refreshToken.findMany.mock.calls as unknown as [
         [
@@ -383,7 +391,9 @@ describe('AuthService', () => {
     });
 
     it('revokes matched active session', async () => {
-      prismaMock.refreshToken.findFirst.mockResolvedValueOnce({ id: 'session-1' });
+      prismaMock.refreshToken.findFirst.mockResolvedValueOnce({
+        id: 'session-1',
+      });
       prismaMock.refreshToken.update.mockResolvedValueOnce({});
 
       const result = await service.revokeDeviceSession('user-1', 'session-1');
@@ -412,7 +422,10 @@ describe('AuthService', () => {
     it('revokes all active sessions except current one', async () => {
       prismaMock.refreshToken.updateMany.mockResolvedValueOnce({ count: 2 });
 
-      const result = await service.logoutOtherDevices('user-1', 'refresh-token');
+      const result = await service.logoutOtherDevices(
+        'user-1',
+        'refresh-token',
+      );
 
       const updateManyCalls = prismaMock.refreshToken.updateMany.mock
         .calls as unknown as [

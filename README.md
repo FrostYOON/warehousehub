@@ -1,135 +1,126 @@
-# Turborepo starter
+# WarehouseHub
 
-This Turborepo starter is maintained by the Turborepo core team.
+창고/물류 관리를 위한 풀스택 웹 애플리케이션. 회사(테넌트) 단위로 재고, 입고, 출고, 반품을 관리합니다.
 
-## Using this example
+## 기술 스택
 
-Run the following command:
+- **API**: NestJS, Prisma, PostgreSQL, JWT(쿠키 기반)
+- **Web**: Next.js, React, Tailwind CSS
+- **모노레포**: Turborepo, pnpm
+
+## 사전 요구사항
+
+- Node.js 18+
+- pnpm 9+
+- PostgreSQL 14+ (또는 Docker)
+
+## 빠른 시작
+
+### 1. 의존성 설치
 
 ```sh
-npx create-turbo@latest
+pnpm install
 ```
 
-## What's inside?
+### 2. 환경 변수 설정
 
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+```sh
+cp .env.example .env
+# .env 파일을 열어 필요한 값으로 수정
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 3. DB 설정 및 마이그레이션
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+```sh
+# Docker로 PostgreSQL 실행 (선택)
+docker-compose up -d db
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
+# API 디렉터리에서 Prisma 마이그레이션
+cd apps/api && pnpm exec prisma migrate deploy
+cd ../..
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 4. 개발 서버 실행
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+```sh
+pnpm dev
 ```
 
-### Remote Caching
+- **API**: http://localhost:3001
+- **Web**: http://localhost:3000
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+## 환경 변수
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+| 변수 | 설명 | 예시 |
+|------|------|------|
+| `DATABASE_URL` | PostgreSQL 연결 문자열 | `postgresql://user:pass@host:5432/db` |
+| `API_PORT` | API 서버 포트 | `3001` |
+| `JWT_SECRET` | JWT 서명 시크릿 (반드시 변경) | 32자 이상 랜덤 문자열 |
+| `NEXT_PUBLIC_API_BASE_URL` | 웹에서 API 호출 URL | `http://localhost:3001` |
+| `WEB_ORIGIN` | 웹 프론트 출처 | `http://localhost:3000` |
+| `CORS_ORIGIN` | CORS 허용 출처 (쉼표 구분) | `http://localhost:3000` |
+| `COOKIE_DOMAIN` | 쿠키 도메인 (서브도메인 공유 시) | 비워두거나 `.example.com` |
+| `COOKIE_SECURE` | HTTPS 전용 쿠키 | `false` (개발) / `true` (프로덕션) |
+| `COOKIE_SAMESITE` | SameSite 속성 | `lax` / `strict` / `none` |
+| `AUTH_MAX_ACTIVE_DEVICES` | 사용자당 최대 동시 로그인 디바이스 수 | `3` |
+| `LOG_LEVEL` | 로그 레벨 | `debug` / `info` / `warn` / `error` |
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+자세한 설명은 `.env.example`의 주석을 참고하세요.
+
+## API 문서
+
+개발 서버 실행 후 Swagger UI에서 확인할 수 있습니다.
+
+- http://localhost:3001/api (Swagger)
+
+## 빌드 및 프로덕션
+
+```sh
+# 전체 빌드
+pnpm build
+
+# API만 빌드
+pnpm --filter api build
+
+# Web만 빌드
+pnpm --filter web build
+```
+
+프로덕션 실행:
+
+```sh
+# API (apps/api에서)
+pnpm --filter api start
+
+# Web (apps/web에서)
+pnpm --filter web start
+```
+
+## 권한·RBAC
+
+- **Warehouses**: 인증된 모든 사용자가 회사 창고 목록 조회 가능 (의도적 설계). 상세: [docs/WAREHOUSES_RBAC.md](./docs/WAREHOUSES_RBAC.md)
+- 역할별 API 접근: [docs/ROLE_API_MATRIX.md](./docs/ROLE_API_MATRIX.md)
+
+## Docker 배포
+
+```sh
+# DB만 실행 (로컬 개발 시)
+docker-compose up -d db
+
+# 전체 스택 (DB + API + Web). 최초 실행 전 apps/api에서 prisma migrate deploy 실행
+docker-compose up -d --build
+```
+
+자세한 배포 가이드는 [배포 가이드](./DEPLOYMENT.md)를 참고하세요.
+
+## 프로젝트 구조
 
 ```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
+warehousehub/
+├── apps/
+│   ├── api/        # NestJS 백엔드 API
+│   └── web/       # Next.js 프론트엔드
+├── packages/      # 공유 패키지
+├── docker-compose.yml
+└── turbo.json
 ```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)

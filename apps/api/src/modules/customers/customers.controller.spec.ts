@@ -37,9 +37,14 @@ describe('CustomersController', () => {
 
   describe('list (GET /customers)', () => {
     it('passes companyId and opts to service with q', async () => {
-      customersServiceMock.list.mockResolvedValueOnce([]);
+      customersServiceMock.list.mockResolvedValueOnce({
+        total: 0,
+        page: 1,
+        pageSize: 500,
+        items: [],
+      });
 
-      await controller.list(req, 'kim');
+      await controller.list(req, { q: 'kim' } as never);
 
       expect(customersServiceMock.list).toHaveBeenCalledWith('company-1', {
         q: 'kim',
@@ -47,9 +52,14 @@ describe('CustomersController', () => {
     });
 
     it('passes includeInactive when query is true', async () => {
-      customersServiceMock.list.mockResolvedValueOnce([]);
+      customersServiceMock.list.mockResolvedValueOnce({
+        total: 0,
+        page: 1,
+        pageSize: 500,
+        items: [],
+      });
 
-      await controller.list(req, undefined, 'true', undefined);
+      await controller.list(req, { includeInactive: true } as never);
 
       expect(customersServiceMock.list).toHaveBeenCalledWith('company-1', {
         includeInactive: true,
@@ -57,23 +67,38 @@ describe('CustomersController', () => {
     });
 
     it('passes isActive when query is true or false', async () => {
-      customersServiceMock.list.mockResolvedValueOnce([]);
-      await controller.list(req, undefined, undefined, 'true');
+      customersServiceMock.list.mockResolvedValueOnce({
+        total: 0,
+        page: 1,
+        pageSize: 500,
+        items: [],
+      });
+      await controller.list(req, { isActive: true } as never);
       expect(customersServiceMock.list).toHaveBeenCalledWith('company-1', {
         isActive: true,
       });
 
-      customersServiceMock.list.mockResolvedValueOnce([]);
-      await controller.list(req, undefined, undefined, 'false');
+      customersServiceMock.list.mockResolvedValueOnce({
+        total: 0,
+        page: 1,
+        pageSize: 500,
+        items: [],
+      });
+      await controller.list(req, { isActive: false } as never);
       expect(customersServiceMock.list).toHaveBeenCalledWith('company-1', {
         isActive: false,
       });
     });
 
     it('passes empty opts when no query params', async () => {
-      customersServiceMock.list.mockResolvedValueOnce([]);
+      customersServiceMock.list.mockResolvedValueOnce({
+        total: 0,
+        page: 1,
+        pageSize: 500,
+        items: [],
+      });
 
-      await controller.list(req);
+      await controller.list(req, {} as never);
 
       expect(customersServiceMock.list).toHaveBeenCalledWith('company-1', {});
     });

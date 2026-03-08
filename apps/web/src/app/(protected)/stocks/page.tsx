@@ -1,23 +1,29 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
-import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
+import { canAccessInbound } from '@/features/auth/model/role-policy';
 import { useStocksPageWithOptions } from '@/features/stocks/hooks/use-stocks-page';
-import type { ItemAnalyticsRange, StockRow, StorageType } from '@/features/stocks/model/types';
+import type { ExpirySoonDays, ItemAnalyticsRange, StockRow, StorageType } from '@/features/stocks/model/types';
+import { LotHistoryModal } from '@/features/traceability/components/lot-history-modal';
 import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
 import { ActionButton, SortableHeader } from '@/shared/ui/common';
 import { useToast } from '@/shared/ui/toast/toast-provider';
+
+function formatRate(rate: number): string {
+  const r = Math.round(rate * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
 
 function parseStorageType(value: string | null): '' | StorageType {
   if (value === 'DRY' || value === 'COOL' || value === 'FRZ') return value;
   return '';
 }
 
-function warehouseDisplay(type: string, name: string): string {
-  if (type === 'FRZ') return 'FRZ';
-  return `${type} (${name})`;
+function warehouseDisplay(type: string): string {
+  return type; // DRY, COOL, FRZ 모두 타입만 표시
 }
 
 type StockSortKey =
@@ -27,8 +33,7 @@ type StockSortKey =
   | 'expiryDate'
   | 'onHand'
   | 'reserved'
-  | 'available'
-  | 'updatedAt';
+  | 'available';
 
 function parseSortKey(value: string | null): StockSortKey {
   if (
@@ -38,8 +43,7 @@ function parseSortKey(value: string | null): StockSortKey {
     value === 'expiryDate' ||
     value === 'onHand' ||
     value === 'reserved' ||
-    value === 'available' ||
-    value === 'updatedAt'
+    value === 'available'
   ) {
     return value;
   }
@@ -50,12 +54,18 @@ function parseSortDir(value: string | null): 'asc' | 'desc' {
   return value === 'desc' ? 'desc' : 'asc';
 }
 
+function parseExpirySoon(value: string | null): ExpirySoonDays | undefined {
+  const n = Number(value);
+  if ([7, 14, 30, 60, 90].includes(n)) return n as ExpirySoonDays;
+  return undefined;
+}
+
 export default function StocksPage() {
   const { showToast } = useToast();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { me, loggingOut, signOut } = useAuthSession();
+  const { me } = useAuthSession();
   const initialRange = useMemo<ItemAnalyticsRange>(() => {
     const q = searchParams.get('range');
     if (q === 'WEEK' || q === 'QUARTER' || q === 'HALF' || q === 'YEAR') return q;
@@ -67,6 +77,10 @@ export default function StocksPage() {
     [searchParams],
   );
   const initialItemCode = useMemo(() => searchParams.get('itemCode') ?? '', [searchParams]);
+  const initialExpirySoon = useMemo(
+    () => parseExpirySoon(searchParams.get('expirySoon')),
+    [searchParams],
+  );
   const initialShortageOnly = useMemo(
     () => searchParams.get('shortageOnly') === '1',
     [searchParams],
@@ -96,6 +110,8 @@ export default function StocksPage() {
     analysisLoading,
     storageType,
     itemCode,
+    expirySoon,
+    setExpirySoon,
     analysisItems,
     analysisItemId,
     analysisRange,
@@ -120,6 +136,7 @@ export default function StocksPage() {
     analysisRange: initialRange,
     storageType: initialStorageType,
     itemCode: initialItemCode,
+    expirySoon: initialExpirySoon,
     page: initialPage,
     pageSize: initialPageSize,
   });
@@ -132,6 +149,10 @@ export default function StocksPage() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [sortKey, setSortKey] = useState<StockSortKey>(initialSortKey);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialSortDir);
+  const [lotHistoryTarget, setLotHistoryTarget] = useState<{
+    lotId: string;
+    lotLabel: string;
+  } | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -199,6 +220,13 @@ export default function StocksPage() {
       changed = true;
     }
 
+    const expirySoonStr = expirySoon != null ? String(expirySoon) : '';
+    if (params.get('expirySoon') !== expirySoonStr) {
+      if (expirySoonStr) params.set('expirySoon', expirySoonStr);
+      else params.delete('expirySoon');
+      changed = true;
+    }
+
     if (!changed) return;
     const next = params.toString();
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
@@ -206,6 +234,7 @@ export default function StocksPage() {
     analysisItemId,
     analysisRange,
     itemCode,
+    expirySoon,
     page,
     pageSize,
     pathname,
@@ -266,11 +295,6 @@ export default function StocksPage() {
           return factor * (a.reserved - b.reserved);
         case 'available':
           return factor * (availableA - availableB);
-        case 'updatedAt':
-          return (
-            factor *
-            (new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
-          );
         default:
           return 0;
       }
@@ -342,20 +366,14 @@ export default function StocksPage() {
   }
 
   return (
-    <DashboardShell
-      userName={me?.name ?? '사용자'}
-      companyName={me?.companyName ?? '회사'}
-      onLogout={signOut}
-      loggingOut={loggingOut}
-      menus={buildDashboardMenus(me?.role)}
-    >
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800">재고 조회</h2>
-        <p className="mt-2 text-sm text-slate-600">
+    <>
+      <section className="page-section">
+        <h2 className="page-title">재고 조회</h2>
+        <p className="page-description">
           창고 타입/품목코드로 필터링해 현재고, 예약수량, 가용수량을 확인합니다.
         </p>
 
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[200px_1fr_auto_auto]">
+        <div className="mt-4 grid grid-cols-2 items-center gap-3 sm:grid-cols-[160px_1fr_auto] sm:gap-4">
           <select
             value={storageType}
             onChange={(e) => {
@@ -363,7 +381,7 @@ export default function StocksPage() {
               setStorageType(next);
               void loadStocks({ nextPage: 1, storageType: next });
             }}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-select"
           >
             <option value="">전체 창고</option>
             <option value="DRY">DRY</option>
@@ -379,26 +397,30 @@ export default function StocksPage() {
               }
             }}
             placeholder="품목코드 (예: A001)"
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-input min-w-0"
           />
-          <ActionButton
-            onClick={() => void loadStocks({ nextPage: 1 })}
-            disabled={loading}
-            className="h-10 rounded-lg border border-slate-300 px-4 text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? '조회 중...' : '조회'}
-          </ActionButton>
-          <ActionButton
-            onClick={() => {
-              void resetFiltersAndReload();
-            }}
-            disabled={loading}
-            className="h-10 rounded-lg border border-slate-300 px-4 text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            초기화
-          </ActionButton>
+          <div className="col-span-2 flex gap-2 sm:col-span-1 sm:justify-end">
+            <ActionButton
+              onClick={() => void loadStocks({ nextPage: 1 })}
+              disabled={loading}
+              size="md"
+              variant="secondary"
+            >
+              {loading ? '조회 중...' : '조회'}
+            </ActionButton>
+            <ActionButton
+              onClick={() => {
+                void resetFiltersAndReload();
+              }}
+              disabled={loading}
+              size="md"
+              variant="secondary"
+            >
+              초기화
+            </ActionButton>
+          </div>
         </div>
-        <div className="mt-3 flex items-center justify-between">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <label className="inline-flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -415,9 +437,9 @@ export default function StocksPage() {
           ) : null}
         </div>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="text-slate-500">
+        <div className="table-wrapper mt-5">
+          <table className="data-table min-w-[840px]">
+            <thead>
                 <tr>
                   <SortableHeader
                     label="창고"
@@ -425,7 +447,6 @@ export default function StocksPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleSort(k as StockSortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="품목코드"
@@ -433,7 +454,6 @@ export default function StocksPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleSort(k as StockSortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="품목명"
@@ -441,7 +461,6 @@ export default function StocksPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleSort(k as StockSortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="유통기한"
@@ -449,7 +468,6 @@ export default function StocksPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleSort(k as StockSortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="현재고"
@@ -457,7 +475,6 @@ export default function StocksPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleSort(k as StockSortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="예약"
@@ -465,7 +482,6 @@ export default function StocksPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleSort(k as StockSortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="가용"
@@ -473,17 +489,9 @@ export default function StocksPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleSort(k as StockSortKey)}
-                    className="px-2 py-2"
                   />
-                  <SortableHeader
-                    label="수정시각"
-                    sortKey="updatedAt"
-                    currentSortKey={sortKey}
-                    currentSortDir={sortDir}
-                    onSort={(k) => toggleSort(k as StockSortKey)}
-                    className="px-2 py-2"
-                  />
-                  {canEditStock && <th className="px-2 py-2">관리</th>}
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-600">이력</th>
+                  {canEditStock && <th>관리</th>}
                 </tr>
               </thead>
             <tbody>
@@ -492,18 +500,18 @@ export default function StocksPage() {
                   const available = row.onHand - row.reserved;
                   const isNegativeAvailable = available < 0;
                   return (
-                    <tr key={row.id} className="border-t border-slate-100">
-                      <td className="px-2 py-2">
-                        {warehouseDisplay(row.warehouse.type, row.warehouse.name)}
+                    <tr key={row.id}>
+                      <td className="px-4 py-3">
+                        {warehouseDisplay(row.warehouse.type)}
                       </td>
-                      <td className="px-2 py-2">{row.lot.item.itemCode}</td>
-                      <td className="px-2 py-2">{row.lot.item.itemName}</td>
-                      <td className="px-2 py-2">
+                      <td className="px-4 py-3">{row.lot.item.itemCode}</td>
+                      <td className="px-4 py-3">{row.lot.item.itemName}</td>
+                      <td className="px-4 py-3">
                         {row.lot.expiryDate
                           ? new Date(row.lot.expiryDate).toLocaleDateString()
                           : '-'}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-4 py-3">
                         {editingStockId === row.id ? (
                           <input
                             value={editingOnHand}
@@ -511,13 +519,13 @@ export default function StocksPage() {
                             type="number"
                             step="0.1"
                             min="0"
-                            className="h-8 w-24 rounded border border-slate-300 px-2 text-xs"
+                            className="form-input h-8 w-24 px-2 text-xs"
                           />
                         ) : (
                           formatDecimalForDisplay(row.onHand)
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-4 py-3">
                         {editingStockId === row.id ? (
                           <input
                             value={editingReserved}
@@ -525,13 +533,13 @@ export default function StocksPage() {
                             type="number"
                             step="0.1"
                             min="0"
-                            className="h-8 w-24 rounded border border-slate-300 px-2 text-xs"
+                            className="form-input h-8 w-24 px-2 text-xs"
                           />
                         ) : (
                           formatDecimalForDisplay(row.reserved)
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-4 py-3">
                         <span
                           className={
                             isNegativeAvailable
@@ -547,24 +555,37 @@ export default function StocksPage() {
                           </span>
                         ) : null}
                       </td>
-                      <td className="px-2 py-2">
-                        {new Date(row.updatedAt).toLocaleString()}
+                      <td className="px-4 py-3">
+                        <ActionButton
+                          onClick={() =>
+                            setLotHistoryTarget({
+                              lotId: row.lot.id,
+                              lotLabel: `${row.lot.item.itemCode} · ${row.lot.item.itemName}`,
+                            })
+                          }
+                          size="sm"
+                          variant="secondary"
+                        >
+                          이력
+                        </ActionButton>
                       </td>
                       {canEditStock && (
-                        <td className="px-2 py-2">
+                        <td className="px-4 py-3">
                           {editingStockId === row.id ? (
                             <div className="flex gap-1">
                               <ActionButton
                                 onClick={() => void saveEdit(row)}
                                 disabled={updatingStockId === row.id}
-                                className="h-8 rounded border border-slate-300 px-2 text-xs hover:bg-slate-100 disabled:opacity-50"
+                                size="sm"
+                                variant="secondary"
                               >
                                 {updatingStockId === row.id ? '저장 중' : '저장'}
                               </ActionButton>
                               <ActionButton
                                 onClick={() => setEditingStockId(null)}
                                 disabled={updatingStockId === row.id}
-                                className="h-8 rounded border border-slate-300 px-2 text-xs hover:bg-slate-100 disabled:opacity-50"
+                                size="sm"
+                                variant="secondary"
                               >
                                 취소
                               </ActionButton>
@@ -572,7 +593,8 @@ export default function StocksPage() {
                           ) : (
                             <ActionButton
                               onClick={() => beginEdit(row)}
-                              className="h-8 rounded border border-slate-300 px-2 text-xs hover:bg-slate-100"
+                              size="sm"
+                              variant="secondary"
                             >
                               수정
                             </ActionButton>
@@ -585,7 +607,17 @@ export default function StocksPage() {
             </tbody>
           </table>
           {!loading && displayedRows.length === 0 && (
-            <p className="mt-3 text-sm text-slate-600">조건에 맞는 재고가 없습니다.</p>
+            <div className="mt-4 flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 px-6 py-8 text-center">
+              <p className="text-sm text-slate-600">조건에 맞는 재고가 없습니다.</p>
+              {canAccessInbound(me?.role) && (
+                <Link
+                  href="/inbound"
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  입고 진행하기
+                </Link>
+              )}
+            </div>
           )}
           {loading && (
             <p className="mt-3 text-sm text-slate-600">재고를 불러오는 중...</p>
@@ -601,7 +633,7 @@ export default function StocksPage() {
                     setPageSize(nextSize);
                     void loadStocks({ nextPage: 1, nextPageSize: nextSize });
                   }}
-                  className="h-8 rounded border border-slate-300 px-2 text-sm"
+                  className="form-select h-8 px-2 text-sm"
                 >
                   <option value={20}>20</option>
                   <option value={50}>50</option>
@@ -676,26 +708,27 @@ export default function StocksPage() {
             </div>
           ) : null}
         </div>
-        <div className="mt-3">
+        <div className="mt-5">
           <ActionButton
             onClick={() => void downloadStocksExcel()}
-            className="h-9 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-100"
+            variant="secondary"
+            size="md"
           >
             재고 전체 엑셀 다운로드
           </ActionButton>
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800">아이템별 출고/리턴 분석</h2>
-        <p className="mt-2 text-sm text-slate-600">
+      <section className="page-section">
+        <h2 className="page-title">아이템별 출고/리턴 분석</h2>
+        <p className="page-description">
           아이템 단위로 기간별 출고량, 리턴량, 리턴율을 함께 확인합니다.
         </p>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_auto_auto]">
+        <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3">
           <select
             value={analysisItemId}
             onChange={(e) => setAnalysisItemId(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="form-select w-full sm:w-[200px]"
           >
             <option value="">아이템 선택</option>
             {analysisItems.map((item) => (
@@ -707,7 +740,7 @@ export default function StocksPage() {
           <select
             value={analysisRange}
             onChange={(e) => setAnalysisRange(e.target.value as ItemAnalyticsRange)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="form-select w-full sm:w-[120px]"
           >
             <option value="WEEK">주간</option>
             <option value="QUARTER">분기</option>
@@ -717,7 +750,8 @@ export default function StocksPage() {
           <ActionButton
             onClick={() => void loadAnalysisTrend()}
             disabled={analysisLoading || !analysisItemId}
-            className="h-10 rounded-lg border border-slate-300 px-4 text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            variant="secondary"
+            size="md"
           >
             {analysisLoading ? '분석 중...' : '분석 갱신'}
           </ActionButton>
@@ -747,7 +781,7 @@ export default function StocksPage() {
               <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-xs text-slate-500">리턴율</p>
                 <p className="mt-1 text-xl font-semibold text-slate-800">
-                  {analysisTrend.totals.returnRate.toFixed(2)}%
+                  {formatRate(analysisTrend.totals.returnRate)}%
                 </p>
               </article>
             </div>
@@ -770,17 +804,17 @@ export default function StocksPage() {
                           <div
                             className="w-2 rounded-sm bg-blue-500"
                             style={{ height: `${outboundHeight}px` }}
-                            title={`출고 ${bucket.outboundQty}`}
+                            title={`출고 ${formatDecimalForDisplay(bucket.outboundQty)}`}
                           />
                           <div
                             className="w-2 rounded-sm bg-emerald-500"
                             style={{ height: `${returnHeight}px` }}
-                            title={`리턴 ${bucket.returnQty}`}
+                            title={`리턴 ${formatDecimalForDisplay(bucket.returnQty)}`}
                           />
                         </div>
                         <p className="mt-1 truncate text-[10px] text-slate-500">{bucket.label}</p>
                         <p className="text-[10px] text-slate-700">
-                          {bucket.returnRate.toFixed(1)}%
+                          {formatRate(bucket.returnRate)}%
                         </p>
                       </div>
                     );
@@ -802,6 +836,14 @@ export default function StocksPage() {
           </>
         )}
       </section>
-    </DashboardShell>
+
+      {lotHistoryTarget && (
+        <LotHistoryModal
+          lotId={lotHistoryTarget.lotId}
+          lotLabel={lotHistoryTarget.lotLabel}
+          onClose={() => setLotHistoryTarget(null)}
+        />
+      )}
+    </>
   );
 }

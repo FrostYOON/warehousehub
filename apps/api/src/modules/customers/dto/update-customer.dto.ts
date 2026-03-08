@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateCustomerDto {
@@ -45,15 +52,19 @@ export class UpdateCustomerDto {
   @MaxLength(100)
   country?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '위도 (-90 ~ 90)' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(-90)
+  @Max(90)
   lat?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: '경도 (-180 ~ 180)' })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(-180)
+  @Max(180)
   lng?: number;
 }

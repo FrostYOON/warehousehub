@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Test with coverage (API)
+        run: cd apps/api && pnpm test:cov
+
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name postgres -p 5432:5432 \
+            -e POSTGRES_USER=warehousehub -e POSTGRES_PASSWORD=warehousehub \
+            -e POSTGRES_DB=warehousehub_test postgres:17
+          for i in {1..30}; do
+            docker exec postgres pg_isready -U warehousehub -d warehousehub_test && break || sleep 2
+          done
+
+      - name: Setup test DB (API)
+        run: |
+          cd apps/api
+          export DATABASE_URL="postgresql://warehousehub:warehousehub@localhost:5432/warehousehub_test?schema=public"
+          pnpm exec prisma migrate deploy
+          pnpm exec prisma db seed
+        env:
+          DATABASE_URL: postgresql://warehousehub:warehousehub@localhost:5432/warehousehub_test?schema=public
+
+      - name: Test integration (API)
+        run: cd apps/api && DATABASE_URL="postgresql://warehousehub:warehousehub@localhost:5432/warehousehub_test?schema=public" pnpm test:integration
+
+      - name: Build
+        run: pnpm build

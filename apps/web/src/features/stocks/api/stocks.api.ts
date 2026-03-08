@@ -9,15 +9,15 @@ import type {
 } from '@/features/stocks/model/types';
 
 export async function getStocks(query: StocksQuery = {}): Promise<StocksListResponse> {
-  const params = new URLSearchParams();
-  if (query.storageType) params.set('storageType', query.storageType);
-  if (query.itemCode?.trim()) params.set('itemCode', query.itemCode.trim());
-  if (query.page) params.set('page', String(query.page));
-  if (query.pageSize) params.set('pageSize', String(query.pageSize));
+  const params: Record<string, string | number> = {};
+  if (query.storageType) params.storageType = query.storageType;
+  if (query.warehouseId) params.warehouseId = query.warehouseId;
+  if (query.itemCode?.trim()) params.itemCode = query.itemCode.trim();
+  if (query.expirySoon) params.expirySoon = query.expirySoon;
+  if (query.page) params.page = query.page;
+  if (query.pageSize) params.pageSize = query.pageSize;
 
-  const res = await httpClient.get<StocksListResponse>('/stocks', {
-    params,
-  });
+  const res = await httpClient.get<StocksListResponse>('/stocks', { params });
   return res.data;
 }
 
@@ -48,9 +48,10 @@ export async function updateStock(
 }
 
 export async function exportStocks(query: StocksQuery = {}): Promise<Blob> {
-  const params = new URLSearchParams();
-  if (query.storageType) params.set('storageType', query.storageType);
-  if (query.itemCode?.trim()) params.set('itemCode', query.itemCode.trim());
+  const params: Record<string, string | number> = {};
+  if (query.storageType) params.storageType = query.storageType;
+  if (query.itemCode?.trim()) params.itemCode = query.itemCode.trim();
+  if (query.expirySoon) params.expirySoon = query.expirySoon;
   const res = await httpClient.get('/stocks/export', {
     params,
     responseType: 'blob',

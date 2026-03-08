@@ -33,6 +33,8 @@ export type DashboardSummaryResponse = {
     topOutboundItems: DashboardItemAnalysis[];
     worstOutboundItems: DashboardItemAnalysis[];
     topReturnRateItems: DashboardItemAnalysis[];
+    prevOutboundTotal: number;
+    prevReturnTotal: number;
   };
   kpis: {
     totalItems: number;
@@ -40,6 +42,19 @@ export type DashboardSummaryResponse = {
     outboundInProgress: number;
     returnsToday: number;
     approvalPending: number;
+    outboundCompletedToday: number;
+    stockShortageCount: number;
+  };
+  inventoryInsights: {
+    expirySoonCount: number;
+    expiryByDays: {
+      within7: number;
+      within14: number;
+      within30: number;
+      within60: number;
+      within90: number;
+    };
+    shortageCount: number;
   };
   alerts: DashboardAlert[];
   todos: DashboardTodo[];

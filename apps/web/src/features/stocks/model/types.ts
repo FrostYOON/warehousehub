@@ -21,9 +21,13 @@ export type StockRow = {
   };
 };
 
+export type ExpirySoonDays = 7 | 14 | 30 | 60 | 90;
+
 export type StocksQuery = {
   storageType?: StorageType;
+  warehouseId?: string;
   itemCode?: string;
+  expirySoon?: ExpirySoonDays;
   page?: number;
   pageSize?: number;
 };

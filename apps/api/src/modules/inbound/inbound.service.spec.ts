@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { InboundService } from './inbound.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -17,7 +17,7 @@ describe('InboundService', () => {
     inventoryTxLine: { create: jest.fn() },
     item: { upsert: jest.fn() },
     lot: { findFirst: jest.fn(), create: jest.fn(), upsert: jest.fn() },
-    warehouse: { findFirst: jest.fn() },
+    warehouse: { findFirst: jest.fn(), findMany: jest.fn() },
     stock: { upsert: jest.fn() },
     $transaction: jest.fn(),
   };
@@ -41,18 +41,19 @@ describe('InboundService', () => {
   describe('createUpload validation', () => {
     it('accepts headers with extra spaces by normalizing column names', async () => {
       prismaMock.inboundUpload.create.mockResolvedValueOnce({ id: 'upload-1' });
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([
-        {
-          ' ItemCode ': 'A001',
-          ItemName: 'Apple',
-          StorageType: 'DRY',
-          Quantity: 10,
-          ExpiryDate: '-',
-        },
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Sheet1');
+      ws.columns = [
+        { header: ' ItemCode ', key: ' ItemCode ', width: 12 },
+        { header: 'ItemName', key: 'ItemName', width: 12 },
+        { header: 'StorageType', key: 'StorageType', width: 12 },
+        { header: 'Quantity', key: 'Quantity', width: 10 },
+        { header: 'ExpiryDate', key: 'ExpiryDate', width: 12 },
+      ];
+      ws.addRows([
+        { ' ItemCode ': 'A001', ItemName: 'Apple', StorageType: 'DRY', Quantity: 10, ExpiryDate: '-' },
       ]);
-      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const buffer = (await wb.xlsx.writeBuffer()) as Buffer;
 
       const result = await service.createUpload({
         companyId: 'company-1',
@@ -66,18 +67,19 @@ describe('InboundService', () => {
 
     it('accepts decimal quantity rows', async () => {
       prismaMock.inboundUpload.create.mockResolvedValueOnce({ id: 'upload-2' });
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([
-        {
-          ItemCode: 'A001',
-          ItemName: 'Apple',
-          StorageType: 'DRY',
-          Quantity: 10.5,
-          ExpiryDate: '-',
-        },
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Sheet1');
+      ws.columns = [
+        { header: 'ItemCode', key: 'ItemCode', width: 12 },
+        { header: 'ItemName', key: 'ItemName', width: 12 },
+        { header: 'StorageType', key: 'StorageType', width: 12 },
+        { header: 'Quantity', key: 'Quantity', width: 10 },
+        { header: 'ExpiryDate', key: 'ExpiryDate', width: 12 },
+      ];
+      ws.addRows([
+        { ItemCode: 'A001', ItemName: 'Apple', StorageType: 'DRY', Quantity: 10.5, ExpiryDate: '-' },
       ]);
-      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-      const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const buffer = (await wb.xlsx.writeBuffer()) as Buffer;
 
       const result = await service.createUpload({
         companyId: 'company-1',
@@ -122,9 +124,11 @@ describe('InboundService', () => {
       });
       prismaMock.inboundUpload.updateMany.mockResolvedValueOnce({ count: 1 });
       prismaMock.inventoryTx.create.mockResolvedValueOnce({ id: 'tx-1' });
+      prismaMock.warehouse.findMany.mockResolvedValueOnce([
+        { id: 'wh-1', type: 'DRY' },
+      ]);
       prismaMock.item.upsert.mockResolvedValueOnce({ id: 'item-1' });
       prismaMock.lot.findFirst.mockResolvedValueOnce({ id: 'lot-1' });
-      prismaMock.warehouse.findFirst.mockResolvedValueOnce({ id: 'wh-1' });
       prismaMock.stock.upsert.mockResolvedValueOnce({});
       prismaMock.inventoryTxLine.create.mockResolvedValueOnce({});
       prismaMock.$transaction.mockImplementationOnce(
@@ -177,6 +181,9 @@ describe('InboundService', () => {
       });
       prismaMock.inboundUpload.updateMany.mockResolvedValueOnce({ count: 1 });
       prismaMock.inventoryTx.create.mockResolvedValueOnce({ id: 'tx-1' });
+      prismaMock.warehouse.findMany.mockResolvedValueOnce([
+        { id: 'wh-1', type: 'DRY' },
+      ]);
       prismaMock.item.upsert
         .mockResolvedValueOnce({ id: 'item-1' })
         .mockResolvedValueOnce({ id: 'item-1' });
@@ -184,9 +191,6 @@ describe('InboundService', () => {
         .mockResolvedValueOnce({ id: 'lot-existing-same-day' }) // first row date exists
         .mockResolvedValueOnce(null); // second row date not exists
       prismaMock.lot.create.mockResolvedValueOnce({ id: 'lot-new-date' });
-      prismaMock.warehouse.findFirst
-        .mockResolvedValueOnce({ id: 'wh-1' })
-        .mockResolvedValueOnce({ id: 'wh-1' });
       prismaMock.stock.upsert.mockResolvedValue({});
       prismaMock.inventoryTxLine.create.mockResolvedValue({});
       prismaMock.$transaction.mockImplementationOnce(

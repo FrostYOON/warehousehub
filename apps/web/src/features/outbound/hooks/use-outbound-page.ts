@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
 import {
   cancelOutboundLine,
   cancelOutboundOrder,
@@ -20,15 +19,7 @@ import type { UserRole } from '@/features/auth/model/types';
 import { getStocks } from '@/features/stocks/api/stocks.api';
 import type { StorageType } from '@/features/stocks/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
-
-function errorMessageFromUnknown(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const payload = error.response?.data as { message?: string | string[] };
-    if (Array.isArray(payload?.message)) return payload.message[0] ?? '출고 요청에 실패했습니다.';
-    return payload?.message ?? '출고 요청에 실패했습니다.';
-  }
-  return '출고 요청에 실패했습니다.';
-}
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 
 export function useOutboundPage(role?: UserRole) {
   const { showToast } = useToast();
@@ -62,7 +53,7 @@ export function useOutboundPage(role?: UserRole) {
       const data = await getOutboundOrders();
       setOrders(data);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '출고 요청에 실패했습니다.'), 'error');
     } finally {
       setLoadingList(false);
     }
@@ -74,7 +65,7 @@ export function useOutboundPage(role?: UserRole) {
       setCustomers(customersData);
       setStockRows(stocksRes.items);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '출고 요청에 실패했습니다.'), 'error');
     }
   }, [showToast]);
 
@@ -90,7 +81,7 @@ export function useOutboundPage(role?: UserRole) {
           ),
         );
       } catch (error) {
-        showToast(errorMessageFromUnknown(error), 'error');
+        showToast(getErrorMessage(error, '출고 요청에 실패했습니다.'), 'error');
       } finally {
         setLoadingDetail(false);
       }
@@ -173,7 +164,7 @@ export function useOutboundPage(role?: UserRole) {
       await loadOrderDetail(selectedOrder.id);
       showToast(successMessage, 'success');
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '출고 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }
@@ -268,7 +259,7 @@ export function useOutboundPage(role?: UserRole) {
       setCreateItemChecked({});
       setCreateItemQty({});
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '출고 요청에 실패했습니다.'), 'error');
     } finally {
       setCreating(false);
     }
@@ -316,7 +307,7 @@ export function useOutboundPage(role?: UserRole) {
       await refreshOrders();
       await loadOrderDetail(selectedOrder.id);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '출고 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }
@@ -331,7 +322,7 @@ export function useOutboundPage(role?: UserRole) {
       await refreshOrders();
       await loadOrderDetail(selectedOrder.id);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '출고 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }
@@ -347,7 +338,7 @@ export function useOutboundPage(role?: UserRole) {
       await refreshOrders();
       await loadOrderDetail(selectedOrder.id);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '출고 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }

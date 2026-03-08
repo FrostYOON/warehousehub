@@ -16,7 +16,11 @@ export class StockItemsQueryDto {
 }
 
 export class ItemTrendQueryDto {
-  @ApiPropertyOptional({ required: false, enum: ItemAnalyticsRange, default: ItemAnalyticsRange.WEEK })
+  @ApiPropertyOptional({
+    required: false,
+    enum: ItemAnalyticsRange,
+    default: ItemAnalyticsRange.WEEK,
+  })
   @IsOptional()
   @IsEnum(ItemAnalyticsRange)
   range: ItemAnalyticsRange = ItemAnalyticsRange.WEEK;

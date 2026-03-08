@@ -114,20 +114,14 @@ export class UsersController {
   }
 
   @Patch(':id/activate')
-  async activate(
-    @Req() req: Request,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  async activate(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
     const { companyId, userId } = req.user!;
     return this.users.activate(companyId, id, userId);
   }
 
   @Delete(':id')
   @ApiOkResponse({ schema: { example: { deleted: true } } })
-  async remove(
-    @Req() req: Request,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  async remove(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
     const { companyId } = req.user!;
     return this.users.removeUnapprovedUser(companyId, id);
   }

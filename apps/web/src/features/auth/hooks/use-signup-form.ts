@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import axios from 'axios';
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 import { getLoginCompanies, signupRequest } from '@/features/auth/api/auth.api';
 import type { LoginCompany, SignupRequest, UserRole } from '@/features/auth/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
@@ -83,16 +83,10 @@ export function useSignupForm() {
       setPassword('');
       setRole('SALES');
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        const data = err.response?.data as { message?: string | string[] };
-        if (Array.isArray(data?.message)) {
-          showToast(data.message[0] ?? '회원가입 신청에 실패했습니다.', 'error');
-        } else {
-          showToast(data?.message ?? '회원가입 신청에 실패했습니다.', 'error');
-        }
-      } else {
-        showToast('회원가입 신청에 실패했습니다.', 'error');
-      }
+      showToast(
+        getErrorMessage(err, '회원가입 신청에 실패했습니다.'),
+        'error',
+      );
     } finally {
       setSubmitting(false);
     }

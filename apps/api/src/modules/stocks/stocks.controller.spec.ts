@@ -27,7 +27,12 @@ describe('StocksController', () => {
 
   it('forwards companyId and query filters to service', async () => {
     const req = { user: { companyId: 'company-1' } } as never;
-    const query = { storageType: StorageType.DRY, itemCode: 'A001', page: 2, pageSize: 20 };
+    const query = {
+      storageType: StorageType.DRY,
+      itemCode: 'A001',
+      page: 2,
+      pageSize: 20,
+    };
     stocksServiceMock.list.mockResolvedValueOnce([]);
 
     await controller.list(req, query);
@@ -47,7 +52,10 @@ describe('StocksController', () => {
 
     await controller.listItems(req, { keyword: 'A00' });
 
-    expect(stocksServiceMock.listItems).toHaveBeenCalledWith('company-1', 'A00');
+    expect(stocksServiceMock.listItems).toHaveBeenCalledWith(
+      'company-1',
+      'A00',
+    );
   });
 
   it('forwards item trend query to service', async () => {

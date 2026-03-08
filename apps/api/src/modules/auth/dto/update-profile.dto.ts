@@ -33,13 +33,21 @@ export class UpdateProfileDto {
   @MaxLength(100, { message: '이름은 100자 이하여야 합니다' })
   name!: string;
 
-  @ApiPropertyOptional({ example: '1990-01-15', description: '생년월일 (YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    example: '1990-01-15',
+    description: '생년월일 (YYYY-MM-DD)',
+  })
   @IsOptional()
-  @Transform(({ value }) => (value === '' || value === undefined ? undefined : value))
+  @Transform(({ value }) =>
+    value === '' || value === undefined ? undefined : value,
+  )
   @IsDateString({}, { message: '올바른 날짜 형식(YYYY-MM-DD)이어야 합니다' })
   dateOfBirth?: string | null;
 
-  @ApiPropertyOptional({ example: '+821012345678', description: '휴대폰 번호 (E.164)' })
+  @ApiPropertyOptional({
+    example: '+821012345678',
+    description: '휴대폰 번호 (E.164)',
+  })
   @IsOptional()
   @Transform(({ value }) => emptyToNull(value))
   @ValidateIf((o) => o.phone != null && o.phone !== '')
@@ -89,9 +97,14 @@ export class UpdateProfileDto {
   @MaxLength(20)
   postalCode?: string | null;
 
-  @ApiPropertyOptional({ example: 'KR', description: 'ISO 3166-1 alpha-2 국가코드' })
+  @ApiPropertyOptional({
+    example: 'KR',
+    description: 'ISO 3166-1 alpha-2 국가코드',
+  })
   @IsOptional()
-  @Transform(({ value }) => (value === '' ? undefined : value?.toUpperCase?.() ?? value))
+  @Transform(({ value }) =>
+    value === '' ? undefined : (value?.toUpperCase?.() ?? value),
+  )
   @ValidateIf((o) => o.countryCode != null && o.countryCode !== '')
   @IsString()
   @Matches(COUNTRY_CODE_REGEX, {
@@ -99,7 +112,10 @@ export class UpdateProfileDto {
   })
   countryCode?: string | null;
 
-  @ApiPropertyOptional({ example: 'https://s3.example.com/profile/abc.jpg', description: '프로필 이미지 URL' })
+  @ApiPropertyOptional({
+    example: 'https://s3.example.com/profile/abc.jpg',
+    description: '프로필 이미지 URL',
+  })
   @IsOptional()
   @Transform(({ value }) => emptyToNull(value))
   @ValidateIf((o) => o.profileImageUrl != null && o.profileImageUrl !== '')

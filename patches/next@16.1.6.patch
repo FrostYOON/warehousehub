@@ -1,0 +1,18 @@
+diff --git a/dist/lib/get-network-host.js b/dist/lib/get-network-host.js
+index 091e2920492ac899df66e6d1ff30e6914d78530e..c50d01bbaabb57a809ed32b4ea2af8919d033565 100644
+--- a/dist/lib/get-network-host.js
++++ b/dist/lib/get-network-host.js
+@@ -15,7 +15,12 @@ function _interop_require_default(obj) {
+     };
+ }
+ function getNetworkHosts(family) {
+-    const interfaces = _os.default.networkInterfaces();
++    let interfaces;
++    try {
++        interfaces = _os.default.networkInterfaces();
++    } catch (_err) {
++        return family === 'IPv4' ? ['127.0.0.1'] : [];
++    }
+     const hosts = [];
+     Object.keys(interfaces).forEach((key)=>{
+         var _interfaces_key;

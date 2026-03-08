@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
 import { canAccessInbound } from '@/features/auth/model/role-policy';
-import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { useInboundPage } from '@/features/inbound/hooks/use-inbound-page';
 import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
 import { ActionButton, SortableHeader, StatusBadge } from '@/shared/ui/common';
@@ -12,7 +11,7 @@ import { ActionButton, SortableHeader, StatusBadge } from '@/shared/ui/common';
 export default function InboundPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { me, loggingOut, signOut } = useAuthSession();
+  const { me } = useAuthSession();
   const canAccess = canAccessInbound(me?.role);
   const {
     filteredUploads,
@@ -78,16 +77,10 @@ export default function InboundPage() {
   }, [searchParams, setKeyword, setStatusFilter]);
 
   return (
-    <DashboardShell
-      userName={me?.name ?? '사용자'}
-      companyName={me?.companyName ?? '회사'}
-      onLogout={signOut}
-      loggingOut={loggingOut}
-      menus={buildDashboardMenus(me?.role)}
-    >
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800">입고 업로드</h2>
-        <p className="mt-2 text-sm text-slate-600">
+    <>
+      <section className="page-section">
+        <h2 className="page-title">입고 업로드</h2>
+        <p className="page-description">
           엑셀 파일을 업로드한 뒤 검증 결과를 확인하고 입고 확정을 진행합니다.
         </p>
         <div className="mt-4 space-y-2">
@@ -112,8 +105,8 @@ export default function InboundPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-slate-800">최근 업로드</h3>
+      <section className="page-section">
+        <h3 className="page-subtitle">최근 업로드</h3>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
           <select
             value={statusFilter}
@@ -122,7 +115,7 @@ export default function InboundPage() {
                 e.target.value as '' | 'UPLOADED' | 'CONFIRMED' | 'CANCELLED',
               )
             }
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-select"
           >
             <option value="">전체 상태</option>
             <option value="UPLOADED">UPLOADED</option>
@@ -133,7 +126,7 @@ export default function InboundPage() {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="파일명 또는 업로드 ID 검색"
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-input"
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
@@ -148,7 +141,7 @@ export default function InboundPage() {
                 setListPageSize(Number(e.target.value));
                 setListPage(1);
               }}
-              className="h-8 rounded border border-slate-300 px-2 text-xs"
+              className="form-select h-8 px-2 text-xs"
             >
               <option value={10}>10</option>
               <option value={20}>20</option>
@@ -161,9 +154,9 @@ export default function InboundPage() {
         ) : filteredUploads.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">업로드 이력이 없습니다.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="text-slate-500">
+          <div className="table-wrapper mt-4">
+            <table className="data-table min-w-[720px]">
+              <thead>
                 <tr>
                   <SortableHeader
                     label="파일명"
@@ -171,7 +164,6 @@ export default function InboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleInboundSort(k as typeof sortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="상태"
@@ -179,7 +171,6 @@ export default function InboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleInboundSort(k as typeof sortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="행 수"
@@ -187,7 +178,6 @@ export default function InboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleInboundSort(k as typeof sortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="오류"
@@ -195,7 +185,6 @@ export default function InboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleInboundSort(k as typeof sortKey)}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="업로드 시각"
@@ -203,31 +192,30 @@ export default function InboundPage() {
                     currentSortKey={sortKey}
                     currentSortDir={sortDir}
                     onSort={(k) => toggleInboundSort(k as typeof sortKey)}
-                    className="px-2 py-2"
                   />
-                  <th className="px-2 py-2">상세</th>
+                  <th>상세</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredUploads.map((upload) => (
-                  <tr key={upload.id} className="border-t border-slate-100">
-                    <td className="px-2 py-2">{upload.fileName}</td>
-                    <td className="px-2 py-2">
+                  <tr key={upload.id}>
+                    <td>{upload.fileName}</td>
+                    <td>
                       <StatusBadge status={upload.status} />
                     </td>
-                    <td className="px-2 py-2">{upload.rowCount}</td>
-                    <td className="px-2 py-2">{upload.invalidCount}</td>
-                    <td className="px-2 py-2">
+                    <td>{upload.rowCount}</td>
+                    <td>{upload.invalidCount}</td>
+                    <td>
                       {new Date(upload.createdAt).toLocaleString()}
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       <button
                         type="button"
                         onClick={() => {
                           setDetailRowPage(1);
                           void loadUploadDetail(upload.id, { rowPage: 1 });
                         }}
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-100"
+                        className="inline-flex h-8 items-center rounded-md border border-slate-300 px-2 text-xs hover:bg-slate-100"
                       >
                         보기
                       </button>
@@ -263,10 +251,10 @@ export default function InboundPage() {
         ) : null}
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="page-section">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-base font-semibold text-slate-800">업로드 상세</h3>
+            <h3 className="page-subtitle">업로드 상세</h3>
             {selectedUpload && (
               <p className="text-xs text-slate-500">
                 상태: <StatusBadge status={selectedUpload.status} /> / 오류:{' '}
@@ -310,42 +298,42 @@ export default function InboundPage() {
             최근 업로드에서 상세 보기를 눌러주세요.
           </p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left text-sm">
-              <thead className="text-slate-500">
+          <div className="table-wrapper mt-3">
+            <table className="data-table min-w-[960px]">
+              <thead>
                 <tr>
-                  <th className="px-2 py-2">ItemCode</th>
-                  <th className="px-2 py-2">ItemName</th>
-                  <th className="px-2 py-2">StorageType</th>
-                  <th className="px-2 py-2">Quantity</th>
-                  <th className="px-2 py-2">ExpiryDate</th>
-                  <th className="px-2 py-2">유효성</th>
-                  <th className="px-2 py-2">메시지</th>
+                  <th>ItemCode</th>
+                  <th>ItemName</th>
+                  <th>StorageType</th>
+                  <th>Quantity</th>
+                  <th>ExpiryDate</th>
+                  <th>유효성</th>
+                  <th>메시지</th>
                 </tr>
               </thead>
               <tbody>
                 {selectedUpload.rows.map((row) => (
                   <tr
                     key={row.id}
-                    className={`border-t border-slate-100 ${!row.isValid ? 'bg-red-50/60' : ''}`}
+                    className={!row.isValid ? 'bg-red-50/60' : ''}
                   >
-                    <td className="px-2 py-2">{row.itemCode}</td>
-                    <td className="px-2 py-2">{row.itemName}</td>
-                    <td className="px-2 py-2">{row.storageType}</td>
-                    <td className="px-2 py-2">{formatDecimalForDisplay(row.quantity)}</td>
-                    <td className="px-2 py-2">
+                    <td>{row.itemCode}</td>
+                    <td>{row.itemName}</td>
+                    <td>{row.storageType}</td>
+                    <td>{formatDecimalForDisplay(row.quantity)}</td>
+                    <td>
                       {row.expiryDate
                         ? new Date(row.expiryDate).toLocaleDateString()
                         : '-'}
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       {row.isValid ? (
                         <StatusBadge status="VALID" />
                       ) : (
                         <StatusBadge status="INVALID" />
                       )}
                     </td>
-                    <td className="px-2 py-2 text-xs text-slate-600">
+                    <td className="text-xs text-slate-600">
                       {row.errorMessage ?? '-'}
                     </td>
                   </tr>
@@ -367,7 +355,7 @@ export default function InboundPage() {
                         rowPageSize: nextSize,
                       });
                     }}
-                    className="h-8 rounded border border-slate-300 px-2 text-xs"
+                    className="form-select h-8 px-2 text-xs"
                   >
                     <option value={20}>20</option>
                     <option value={50}>50</option>
@@ -408,6 +396,6 @@ export default function InboundPage() {
           </div>
         )}
       </section>
-    </DashboardShell>
+    </>
   );
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
 import {
   cancelInboundUpload,
   confirmInboundUpload,
@@ -11,15 +10,7 @@ import {
 } from '@/features/inbound/api/inbound.api';
 import type { InboundUploadDetail, InboundUploadSummary } from '@/features/inbound/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
-
-function errorMessageFromUnknown(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const payload = error.response?.data as { message?: string | string[] };
-    if (Array.isArray(payload?.message)) return payload.message[0] ?? '요청에 실패했습니다.';
-    return payload?.message ?? '요청에 실패했습니다.';
-  }
-  return '요청에 실패했습니다.';
-}
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 
 function normalizeQuantity(value: unknown): number {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -148,7 +139,7 @@ export function useInboundPage() {
       setListPage(data.page);
       setListPageSize(data.pageSize);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '요청에 실패했습니다.'), 'error');
     } finally {
       setLoadingList(false);
     }
@@ -175,7 +166,7 @@ export function useInboundPage() {
           })),
         });
       } catch (error) {
-        showToast(errorMessageFromUnknown(error), 'error');
+        showToast(getErrorMessage(error, '요청에 실패했습니다.'), 'error');
       } finally {
         setLoadingDetail(false);
       }
@@ -206,7 +197,7 @@ export function useInboundPage() {
         showToast('업로드가 완료되었습니다.', 'success');
       }
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '요청에 실패했습니다.'), 'error');
     } finally {
       setUploading(false);
     }
@@ -221,7 +212,7 @@ export function useInboundPage() {
       await loadUploadDetail(selectedUpload.id, { rowPage: detailRowPage });
       showToast('입고 확정이 완료되었습니다.', 'success');
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '요청에 실패했습니다.'), 'error');
     } finally {
       setConfirming(false);
     }
@@ -236,7 +227,7 @@ export function useInboundPage() {
       await loadUploadDetail(selectedUpload.id, { rowPage: detailRowPage });
       showToast('입고 업로드를 취소했습니다.', 'success');
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '요청에 실패했습니다.'), 'error');
     } finally {
       setCancelling(false);
     }

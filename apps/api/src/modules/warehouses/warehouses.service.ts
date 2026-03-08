@@ -8,11 +8,12 @@ export class WarehousesService {
   list(companyId: string) {
     return this.prisma.warehouse.findMany({
       where: { companyId },
-      orderBy: { type: 'asc' },
+      orderBy: [{ type: 'asc' }, { region: 'asc' }],
       select: {
         id: true,
         type: true,
         name: true,
+        region: true,
         createdAt: true,
         updatedAt: true,
       },

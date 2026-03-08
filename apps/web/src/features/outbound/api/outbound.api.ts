@@ -43,8 +43,13 @@ export async function completeShipping(orderId: string): Promise<void> {
 }
 
 export async function getCustomers(): Promise<CustomerOption[]> {
-  const res = await httpClient.get<CustomerOption[]>('/customers');
-  return res.data;
+  const res = await httpClient.get<{
+    total: number;
+    page: number;
+    pageSize: number;
+    items: CustomerOption[];
+  }>('/customers');
+  return res.data.items;
 }
 
 export async function createOutboundOrder(
@@ -70,4 +75,9 @@ export async function cancelOutboundLine(orderId: string, lineId: string): Promi
 
 export async function cancelOutboundOrder(orderId: string, reason?: string): Promise<void> {
   await httpClient.patch(`/outbound/orders/${orderId}/cancel`, { reason });
+}
+
+export async function exportOutbound(): Promise<Blob> {
+  const res = await httpClient.get('/outbound/orders/export', { responseType: 'blob' });
+  return res.data as Blob;
 }

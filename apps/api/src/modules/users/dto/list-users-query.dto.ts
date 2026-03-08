@@ -27,7 +27,12 @@ function toInt(value: unknown, def: number): number {
   return Number.isNaN(n) ? def : n;
 }
 
-export const SORT_BY_VALUES = ['name', 'email', 'createdAt', 'updatedAt'] as const;
+export const SORT_BY_VALUES = [
+  'name',
+  'email',
+  'createdAt',
+  'updatedAt',
+] as const;
 export const SORT_ORDER_VALUES = ['asc', 'desc'] as const;
 export type SortBy = (typeof SORT_BY_VALUES)[number];
 export type SortOrder = (typeof SORT_ORDER_VALUES)[number];

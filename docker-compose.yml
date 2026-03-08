@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:17
-    container_name: warehousehub
+    container_name: warehousehub-db
     restart: always
     ports:
       - "5432:5432"
@@ -10,7 +10,48 @@ services:
       POSTGRES_PASSWORD: warehousehub
       POSTGRES_DB: warehousehub
     volumes:
-      - warehousehub:/var/lib/postgresql/data
+      - warehousehub_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U warehousehub -d warehousehub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: warehousehub-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://warehousehub:warehousehub@db:5432/warehousehub?schema=public
+      API_PORT: "3001"
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      NODE_ENV: production
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      COOKIE_SECURE: "false"
+      COOKIE_SAMESITE: lax
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:3001}
+    container_name: warehousehub-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - api
 
 volumes:
-  warehousehub:
+  warehousehub_data:

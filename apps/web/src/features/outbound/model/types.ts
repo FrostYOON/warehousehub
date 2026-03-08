@@ -41,6 +41,13 @@ export type OutboundOrder = {
     name?: string;
     customerName?: string;
     code?: string;
+    customerAddress?: string | null;
+    city?: string | null;
+    state?: string | null;
+    postalCode?: string | null;
+    country?: string | null;
+    lat?: number | string | null;
+    lng?: number | string | null;
   };
   lines: OutboundLine[];
 };

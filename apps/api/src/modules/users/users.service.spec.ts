@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { UsersService } from './users.service';
@@ -19,6 +24,7 @@ describe('UsersService', () => {
     },
     userAuditLog: {
       create: jest.fn(),
+      createMany: jest.fn(),
       findMany: jest.fn(),
     },
   };
@@ -43,7 +49,13 @@ describe('UsersService', () => {
     it('returns paginated users with default filters', async () => {
       prismaMock.user.count.mockResolvedValue(5);
       prismaMock.user.findMany.mockResolvedValue([
-        { id: 'u1', email: 'a@b.com', name: 'Alice', role: Role.DELIVERY, isActive: true },
+        {
+          id: 'u1',
+          email: 'a@b.com',
+          name: 'Alice',
+          role: Role.DELIVERY,
+          isActive: true,
+        },
       ]);
 
       const result = await service.listUsersByCompany('company-1');
@@ -199,13 +211,24 @@ describe('UsersService', () => {
 
   describe('updateRole', () => {
     it('updates role successfully', async () => {
-      const updated = { id: 'u1', email: 'a@b.com', name: 'A', role: Role.SALES, isActive: true };
+      const updated = {
+        id: 'u1',
+        email: 'a@b.com',
+        name: 'A',
+        role: Role.SALES,
+        isActive: true,
+      };
       prismaMock.user.findUnique
         .mockResolvedValueOnce({ id: 'u1', role: Role.DELIVERY })
         .mockResolvedValueOnce(updated);
       prismaMock.user.updateMany.mockResolvedValue({ count: 1 });
 
-      const result = await service.updateRole('company-1', 'u1', Role.SALES, 'actor-1');
+      const result = await service.updateRole(
+        'company-1',
+        'u1',
+        Role.SALES,
+        'actor-1',
+      );
 
       expect(result).toEqual(updated);
       expect(prismaMock.user.updateMany).toHaveBeenCalledWith({
@@ -234,7 +257,10 @@ describe('UsersService', () => {
     });
 
     it('throws ForbiddenException when self-demoting from ADMIN', async () => {
-      prismaMock.user.findUnique.mockResolvedValue({ id: 'admin-1', role: Role.ADMIN });
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'admin-1',
+        role: Role.ADMIN,
+      });
 
       await expect(
         service.updateRole('company-1', 'admin-1', Role.WH_MANAGER, 'admin-1'),
@@ -244,7 +270,13 @@ describe('UsersService', () => {
 
   describe('deactivate', () => {
     it('deactivates user successfully', async () => {
-      const deactivated = { id: 'u1', email: 'a@b.com', name: 'A', role: Role.DELIVERY, isActive: false };
+      const deactivated = {
+        id: 'u1',
+        email: 'a@b.com',
+        name: 'A',
+        role: Role.DELIVERY,
+        isActive: false,
+      };
       prismaMock.user.findUnique
         .mockResolvedValueOnce({ id: 'u1', role: Role.DELIVERY })
         .mockResolvedValueOnce(deactivated);
@@ -263,15 +295,20 @@ describe('UsersService', () => {
     it('throws NotFoundException when user not found', async () => {
       prismaMock.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.deactivate('company-1', 'unknown', 'actor-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.deactivate('company-1', 'unknown', 'actor-1'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('throws ForbiddenException when self-deactivating (without allowSelf)', async () => {
-      prismaMock.user.findUnique.mockResolvedValue({ id: 'me', role: Role.DELIVERY });
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'me',
+        role: Role.DELIVERY,
+      });
 
-      await expect(service.deactivate('company-1', 'me', 'me')).rejects.toThrow(ForbiddenException);
+      await expect(service.deactivate('company-1', 'me', 'me')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('allows self-deactivate when allowSelf is true', async () => {
@@ -281,13 +318,18 @@ describe('UsersService', () => {
         .mockResolvedValueOnce(deactivated);
       prismaMock.user.updateMany.mockResolvedValue({ count: 1 });
 
-      const result = await service.deactivate('company-1', 'me', 'me', { allowSelf: true });
+      const result = await service.deactivate('company-1', 'me', 'me', {
+        allowSelf: true,
+      });
 
       expect(result.isActive).toBe(false);
     });
 
     it('throws ForbiddenException when deactivating ADMIN', async () => {
-      prismaMock.user.findUnique.mockResolvedValue({ id: 'admin-1', role: Role.ADMIN });
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'admin-1',
+        role: Role.ADMIN,
+      });
 
       await expect(
         service.deactivate('company-1', 'admin-1', 'actor-1'),
@@ -297,7 +339,13 @@ describe('UsersService', () => {
 
   describe('activate', () => {
     it('activates user successfully', async () => {
-      const activated = { id: 'u1', email: 'a@b.com', name: 'A', role: Role.DELIVERY, isActive: true };
+      const activated = {
+        id: 'u1',
+        email: 'a@b.com',
+        name: 'A',
+        role: Role.DELIVERY,
+        isActive: true,
+      };
       prismaMock.user.findUnique
         .mockResolvedValueOnce({ id: 'u1' })
         .mockResolvedValueOnce(activated);
@@ -316,9 +364,9 @@ describe('UsersService', () => {
     it('throws NotFoundException when user not found', async () => {
       prismaMock.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.activate('company-1', 'unknown', 'actor-1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.activate('company-1', 'unknown', 'actor-1'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -334,7 +382,9 @@ describe('UsersService', () => {
       const result = await service.removeUnapprovedUser('company-1', 'u1');
 
       expect(result).toEqual({ deleted: true });
-      expect(prismaMock.user.delete).toHaveBeenCalledWith({ where: { id: 'u1' } });
+      expect(prismaMock.user.delete).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+      });
     });
 
     it('throws NotFoundException when user not found', async () => {
@@ -379,7 +429,11 @@ describe('UsersService', () => {
       ]);
       prismaMock.user.updateMany.mockResolvedValue({ count: 2 });
 
-      const result = await service.bulkDeactivate('company-1', ['u1', 'actor-1', 'u2'], 'actor-1');
+      const result = await service.bulkDeactivate(
+        'company-1',
+        ['u1', 'actor-1', 'u2'],
+        'actor-1',
+      );
 
       expect(result).toEqual({ deactivated: 2, skipped: 1 });
       expect(prismaMock.user.updateMany).toHaveBeenCalledWith({
@@ -408,10 +462,15 @@ describe('UsersService', () => {
       ]);
       prismaMock.user.updateMany.mockResolvedValue({ count: 1 });
 
-      const result = await service.bulkRole('company-1', ['u1', 'admin-1', 'u2'], Role.WH_MANAGER, 'actor-1');
+      const result = await service.bulkRole(
+        'company-1',
+        ['u1', 'admin-1', 'u2'],
+        Role.WH_MANAGER,
+        'actor-1',
+      );
 
       expect(result).toEqual({ updated: 2, skipped: 1 });
-      expect(prismaMock.user.updateMany).toHaveBeenCalledTimes(2);
+      expect(prismaMock.user.updateMany).toHaveBeenCalledTimes(1);
     });
 
     it('throws BadRequestException when no allowed targets', async () => {

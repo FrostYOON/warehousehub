@@ -19,8 +19,8 @@ import type {
   UserAuditLogItem,
   UserRole,
 } from '@/features/auth/model/types';
-import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { useToast } from '@/shared/ui/toast/toast-provider';
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 import {
   PASSWORD_REQUIREMENT_TEXT,
   validatePassword,
@@ -51,7 +51,7 @@ const ROLE_OPTIONS: UserRole[] = [
 
 export default function MembersPage() {
   const router = useRouter();
-  const { me, loggingOut, signOut } = useAuthSession();
+  const { me } = useAuthSession();
   const { showToast } = useToast();
 
   const [users, setUsers] = useState<CompanyUser[]>([]);
@@ -148,13 +148,10 @@ export default function MembersPage() {
       );
       showToast(`${user.name}님을 비활성화했습니다.`, 'success');
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '비활성화 처리에 실패했습니다.', 'error');
+      showToast(
+        getErrorMessage(err, '비활성화 처리에 실패했습니다.'),
+        'error',
+      );
     } finally {
       setActionId(null);
     }
@@ -197,13 +194,7 @@ export default function MembersPage() {
       setRefreshKey((k) => k + 1);
       showToast('멤버가 추가되었습니다.', 'success');
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '멤버 추가에 실패했습니다.', 'error');
+      showToast(getErrorMessage(err, '멤버 추가에 실패했습니다.'), 'error');
     } finally {
       setAddSubmitting(false);
     }
@@ -249,13 +240,10 @@ export default function MembersPage() {
         'success',
       );
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '일괄 비활성화에 실패했습니다.', 'error');
+      showToast(
+        getErrorMessage(err, '일괄 비활성화에 실패했습니다.'),
+        'error',
+      );
     } finally {
       setBulkActionLoading(false);
     }
@@ -274,13 +262,10 @@ export default function MembersPage() {
         'success',
       );
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '일괄 역할 변경에 실패했습니다.', 'error');
+      showToast(
+        getErrorMessage(err, '일괄 역할 변경에 실패했습니다.'),
+        'error',
+      );
     } finally {
       setBulkActionLoading(false);
     }
@@ -339,31 +324,18 @@ export default function MembersPage() {
       );
       showToast(`${user.name}님의 역할을 변경했습니다.`, 'success');
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '역할 변경에 실패했습니다.', 'error');
+      showToast(getErrorMessage(err, '역할 변경에 실패했습니다.'), 'error');
     } finally {
       setActionId(null);
     }
   }
 
   return (
-    <DashboardShell
-      userName={me?.name ?? '사용자'}
-      companyName={me?.companyName ?? '회사'}
-      onLogout={signOut}
-      loggingOut={loggingOut}
-      menus={buildDashboardMenus(me?.role)}
-    >
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="page-section">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-slate-700">회원 관리</h2>
-            <p className="text-xs text-slate-500">
+            <h2 className="page-title">회원 관리</h2>
+            <p className="page-description">
               같은 회사 소속 멤버를 조회하고 역할 변경, 비활성화할 수 있습니다.
             </p>
           </div>
@@ -404,12 +376,12 @@ export default function MembersPage() {
             placeholder="이름·이메일 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 w-44 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+            className="form-input h-9 w-44"
           />
           <select
             value={filterRole}
             onChange={(e) => setFilterRole(e.target.value)}
-            className="h-9 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+            className="form-select h-9"
           >
             <option value="">전체 역할</option>
             {ROLE_OPTIONS.map((r) => (
@@ -421,7 +393,7 @@ export default function MembersPage() {
           <select
             value={filterIsActive}
             onChange={(e) => setFilterIsActive(e.target.value)}
-            className="h-9 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+            className="form-select h-9"
           >
             <option value="">전체 상태</option>
             <option value="true">활성</option>
@@ -432,7 +404,7 @@ export default function MembersPage() {
             onChange={(e) =>
               setSortBy(e.target.value as 'name' | 'email' | 'createdAt' | 'updatedAt')
             }
-            className="h-9 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+            className="form-select h-9"
           >
             {SORT_BY_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -443,7 +415,7 @@ export default function MembersPage() {
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-            className="h-9 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+            className="form-select h-9"
           >
             <option value="desc">내림차순</option>
             <option value="asc">오름차순</option>
@@ -463,11 +435,11 @@ export default function MembersPage() {
         )}
 
         {!loading && users.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] text-sm">
+          <div className="table-wrapper">
+            <table className="data-table min-w-[480px]">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-600">
-                  <th className="w-10 pb-2 pr-2">
+                <tr>
+                  <th className="w-10">
                     {users.some(canSelectUser) && (
                       <input
                         type="checkbox"
@@ -480,21 +452,18 @@ export default function MembersPage() {
                       />
                     )}
                   </th>
-                  <th className="pb-2 pr-4">이름</th>
-                  <th className="pb-2 pr-4">이메일</th>
-                  <th className="pb-2 pr-4">역할</th>
-                  <th className="pb-2 pr-4">상태</th>
-                  <th className="pb-2 pr-4">마지막 로그인</th>
-                  <th className="pb-2">작업</th>
+                  <th>이름</th>
+                  <th>이메일</th>
+                  <th>역할</th>
+                  <th>상태</th>
+                  <th>마지막 로그인</th>
+                  <th>작업</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="border-b border-slate-100 last:border-0"
-                  >
-                    <td className="w-10 py-3 pr-2">
+                  <tr key={user.id}>
+                    <td className="w-10">
                       {canSelectUser(user) ? (
                         <input
                           type="checkbox"
@@ -504,11 +473,11 @@ export default function MembersPage() {
                         />
                       ) : null}
                     </td>
-                    <td className="py-3 pr-4 font-medium text-slate-800">
+                    <td className="font-medium text-slate-800">
                       {user.name}
                     </td>
-                    <td className="py-3 pr-4 text-slate-600">{user.email}</td>
-                    <td className="py-3 pr-4">
+                    <td className="text-slate-600">{user.email}</td>
+                    <td>
                       <select
                         value={user.role}
                         onChange={(e) =>
@@ -518,7 +487,7 @@ export default function MembersPage() {
                           )
                         }
                         disabled={actionId === user.id || user.id === me?.id}
-                        className="h-8 rounded border border-slate-300 bg-white px-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                        className="form-select h-8 px-2 text-xs disabled:cursor-not-allowed"
                       >
                         {ROLE_OPTIONS.map((r) => (
                           <option key={r} value={r}>
@@ -527,7 +496,7 @@ export default function MembersPage() {
                         ))}
                       </select>
                     </td>
-                    <td className="py-3 pr-4">
+                    <td>
                       <span
                         className={
                           user.isActive
@@ -541,7 +510,7 @@ export default function MembersPage() {
                     <td className="py-3 pr-4 text-xs text-slate-500">
                       {formatLastLogin(user.lastLoginAt)}
                     </td>
-                    <td className="py-3">
+                    <td>
                       <div className="flex flex-wrap items-center gap-1">
                       {user.isActive ? (
                         <button
@@ -636,7 +605,7 @@ export default function MembersPage() {
                     value={addForm.email}
                     onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
                     disabled={addSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    className="form-input mt-1"
                     placeholder="staff@example.com"
                   />
                 </div>
@@ -651,7 +620,7 @@ export default function MembersPage() {
                     value={addForm.name}
                     onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
                     disabled={addSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    className="form-input mt-1"
                     placeholder="홍길동"
                   />
                 </div>
@@ -667,7 +636,7 @@ export default function MembersPage() {
                     value={addForm.password}
                     onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))}
                     disabled={addSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    className="form-input mt-1"
                     placeholder="비밀번호"
                   />
                 </div>
@@ -682,7 +651,7 @@ export default function MembersPage() {
                       setAddForm((f) => ({ ...f, role: e.target.value as UserRole }))
                     }
                     disabled={addSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    className="form-select mt-1"
                   >
                     {ROLE_OPTIONS.filter((r) => r !== 'ADMIN').map((r) => (
                       <option key={r} value={r}>
@@ -729,7 +698,7 @@ export default function MembersPage() {
                     onChange={(e) =>
                       setBulkRoleValue(e.target.value as UserRole)
                     }
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    className="form-select mt-1"
                   >
                     {ROLE_OPTIONS.filter((r) => r !== 'ADMIN').map((r) => (
                       <option key={r} value={r}>
@@ -818,6 +787,5 @@ export default function MembersPage() {
           </div>
         )}
       </section>
-    </DashboardShell>
   );
 }

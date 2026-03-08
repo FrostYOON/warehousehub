@@ -467,23 +467,43 @@ export class OutboundPickingService {
       },
     });
 
+    // Stock: 동일 (companyId, warehouseId, lotId)별로 qty 합산 후 1회 update
+    const stockDecrements = new Map<
+      string,
+      { warehouseId: string; lotId: string; qty: number }
+    >();
     for (const alloc of allocations) {
-      await tx.stock.update({
-        where: {
-          companyId_warehouseId_lotId: {
-            companyId,
-            warehouseId: alloc.warehouseId,
-            lotId: alloc.lotId,
-          },
-        },
-        data: { reserved: { decrement: asNumber(alloc.qty) } },
-      });
-
-      await tx.pickAllocation.update({
-        where: { id: alloc.id },
-        data: { isReleased: true, releasedAt: new Date() },
-      });
+      const key = `${alloc.warehouseId}:${alloc.lotId}`;
+      const existing = stockDecrements.get(key);
+      const qty = asNumber(alloc.qty);
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        stockDecrements.set(key, {
+          warehouseId: alloc.warehouseId,
+          lotId: alloc.lotId,
+          qty,
+        });
+      }
     }
+
+    const releasedAt = new Date();
+    await Promise.all([
+      ...Array.from(stockDecrements.values()).map(({ warehouseId, lotId, qty }) =>
+        tx.stock.update({
+          where: {
+            companyId_warehouseId_lotId: { companyId, warehouseId, lotId },
+          },
+          data: { reserved: { decrement: qty } },
+        }),
+      ),
+      ...allocations.map((alloc) =>
+        tx.pickAllocation.update({
+          where: { id: alloc.id },
+          data: { isReleased: true, releasedAt },
+        }),
+      ),
+    ]);
 
     return { released: allocations.length };
   }

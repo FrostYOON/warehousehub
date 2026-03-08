@@ -1,12 +1,17 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import {
   hashPassword,
@@ -14,7 +19,9 @@ import {
 } from '../../common/utils/password.util';
 import {
   addDays,
+  addHours,
   generateRefreshToken,
+  generateResetToken,
   hashToken,
 } from '../../common/utils/token.util';
 import { getModuleLogger } from '../../common/logging/module-logger';
@@ -23,6 +30,8 @@ import type { LoginDto } from './dto/login.dto';
 import type { SignupRequestDto } from './dto/signup-request.dto';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
 import type { ChangePasswordDto } from './dto/change-password.dto';
+import type { ForgotPasswordDto } from './dto/forgot-password.dto';
+import type { ResetPasswordDto } from './dto/reset-password.dto';
 import type { RequestMeta } from './http/decorators/req-meta.decorator';
 
 type AccessTokenPayload = {
@@ -62,6 +71,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
     private readonly jwt: JwtService,
+    private readonly mail: MailService,
   ) {}
 
   async listLoginCompanies() {
@@ -150,7 +160,10 @@ export class AuthService {
         message: 'Signup request submitted. Awaiting company admin approval.',
       };
     } catch (error) {
-      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         throw new ConflictException('Email already in use');
       }
       throw error;
@@ -158,14 +171,27 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, meta: RequestMeta = {}) {
-    const company = await this.users.findCompanyByName(dto.companyName);
-    if (!company) throw new UnauthorizedException('Invalid credentials');
+    const companyName = (dto.companyName ?? '').trim();
+    const email = (dto.email ?? '').trim();
+    const password = (dto.password ?? '').trim();
 
-    const user = await this.users.findActiveUserByEmail(company.id, dto.email);
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    const company = await this.users.findCompanyByName(companyName);
+    if (!company) {
+      logger.warn({ event: 'auth.login.fail', reason: 'company_not_found' });
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
-    const ok = await comparePassword(dto.password, user.passwordHash);
-    if (!ok) throw new UnauthorizedException('Invalid credentials');
+    const user = await this.users.findActiveUserByEmail(company.id, email);
+    if (!user) {
+      logger.warn({ event: 'auth.login.fail', reason: 'user_not_found', companyId: company.id });
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const ok = await comparePassword(password, user.passwordHash);
+    if (!ok) {
+      logger.warn({ event: 'auth.login.fail', reason: 'password_mismatch', userId: user.id });
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -319,7 +345,8 @@ export class AuthService {
     if (dto.stateProvince !== undefined) data.stateProvince = dto.stateProvince;
     if (dto.postalCode !== undefined) data.postalCode = dto.postalCode;
     if (dto.countryCode !== undefined) data.countryCode = dto.countryCode;
-    if (dto.profileImageUrl !== undefined) data.profileImageUrl = dto.profileImageUrl;
+    if (dto.profileImageUrl !== undefined)
+      data.profileImageUrl = dto.profileImageUrl;
 
     const updated = await this.prisma.user.update({
       where: { id: userId },
@@ -371,16 +398,191 @@ export class AuthService {
     };
   }
 
+  async uploadProfileImage(
+    userId: string,
+    file: Express.Multer.File,
+  ): Promise<{
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    companyId: string;
+    companyName: string | null;
+    profileImageUrl: string | null;
+    [key: string]: unknown;
+  }> {
+    const user = await this.users.findUserById(userId);
+    if (!user || !user.isActive) throw new UnauthorizedException();
+
+    const ext = path.extname(file.originalname) || '.png';
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    if (!allowedExt.includes(ext.toLowerCase())) {
+      throw new BadRequestException('이미지 파일만 업로드 가능합니다 (jpg, png, gif, webp)');
+    }
+
+    // __dirname = dist/modules/auth → ../../.. = apps/api, uploads/profiles = apps/api/uploads/profiles
+    const uploadsDir = path.join(__dirname, '..', '..', '..', 'uploads', 'profiles');
+    try {
+      await fs.promises.mkdir(uploadsDir, { recursive: true });
+    } catch {
+      throw new BadRequestException('업로드 디렉터리 생성 실패');
+    }
+
+    const filename = `${randomUUID()}${ext}`;
+    const filepath = path.join(uploadsDir, filename);
+
+    await fs.promises.writeFile(filepath, file.buffer);
+
+    const profileImageUrl = `/uploads/profiles/${filename}`;
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { profileImageUrl },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        companyId: true,
+        dateOfBirth: true,
+        phone: true,
+        addressLine1: true,
+        addressLine2: true,
+        city: true,
+        stateProvince: true,
+        postalCode: true,
+        countryCode: true,
+        profileImageUrl: true,
+      },
+    });
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: user.companyId },
+    });
+
+    logger.info({ event: 'auth.avatar_uploaded', userId });
+
+    return {
+      id: updated.id,
+      email: updated.email,
+      name: updated.name,
+      role: updated.role,
+      companyId: updated.companyId,
+      companyName: company?.name ?? null,
+      dateOfBirth: updated.dateOfBirth?.toISOString().split('T')[0] ?? null,
+      phone: updated.phone ?? null,
+      addressLine1: updated.addressLine1 ?? null,
+      addressLine2: updated.addressLine2 ?? null,
+      city: updated.city ?? null,
+      stateProvince: updated.stateProvince ?? null,
+      postalCode: updated.postalCode ?? null,
+      countryCode: updated.countryCode ?? null,
+      profileImageUrl: updated.profileImageUrl ?? null,
+    };
+  }
+
+  async requestPasswordReset(dto: ForgotPasswordDto): Promise<{ ok: true }> {
+    const company = await this.users.findCompanyByName(dto.companyName);
+    if (!company) {
+      return { ok: true };
+    }
+
+    const user = await this.users.findActiveUserByEmail(company.id, dto.email);
+    if (!user) {
+      return { ok: true };
+    }
+
+    const rawToken = generateResetToken();
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = addHours(1);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordResetToken: tokenHash,
+        passwordResetExpires: expiresAt,
+      },
+    });
+
+    const baseUrl =
+      process.env.APP_URL ??
+      process.env.FRONTEND_URL ??
+      'http://localhost:3000';
+    const resetLink = `${baseUrl}/reset-password?token=${rawToken}`;
+
+    if (process.env.NODE_ENV === 'production') {
+      await this.mail.send({
+        to: user.email,
+        subject: '비밀번호 재설정 - WarehouseHub',
+        text: `비밀번호 재설정을 요청하셨습니다. 아래 링크를 클릭하여 새 비밀번호를 설정해 주세요.\n\n${resetLink}\n\n이 링크는 1시간 후 만료됩니다.\n\n이 요청을 하지 않았다면 이 이메일을 무시해 주세요.`,
+        html: `<p>비밀번호 재설정을 요청하셨습니다.</p><p><a href="${resetLink}">비밀번호 재설정하기</a></p><p>이 링크는 1시간 후 만료됩니다.</p><p>이 요청을 하지 않았다면 이 이메일을 무시해 주세요.</p>`,
+      });
+    } else {
+      logger.info({
+        event: 'auth.forgot_password.token_created',
+        userId: user.id,
+        companyId: company.id,
+        resetLink,
+      });
+      await this.mail.send({
+        to: user.email,
+        subject: '[DEV] 비밀번호 재설정 - WarehouseHub',
+        text: `[DEV] Reset link: ${resetLink}`,
+      });
+    }
+
+    return { ok: true };
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ ok: true }> {
+    const tokenHash = hashToken(dto.token);
+    const now = new Date();
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        passwordResetToken: tokenHash,
+        passwordResetExpires: { gt: now },
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('유효하지 않거나 만료된 토큰입니다');
+    }
+
+    const passwordHash = await hashPassword((dto.newPassword ?? '').trim());
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+      },
+    });
+
+    logger.info({
+      event: 'auth.password_reset.success',
+      userId: user.id,
+    });
+
+    return { ok: true };
+  }
+
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.users.findUserById(userId);
     if (!user || !user.isActive) throw new UnauthorizedException();
 
-    const ok = await comparePassword(dto.currentPassword, user.passwordHash);
+    const ok = await comparePassword(
+      (dto.currentPassword ?? '').trim(),
+      user.passwordHash,
+    );
     if (!ok) {
       throw new UnauthorizedException('현재 비밀번호가 올바르지 않습니다');
     }
 
-    const passwordHash = await hashPassword(dto.newPassword);
+    const passwordHash = await hashPassword((dto.newPassword ?? '').trim());
 
     await this.prisma.user.update({
       where: { id: userId },

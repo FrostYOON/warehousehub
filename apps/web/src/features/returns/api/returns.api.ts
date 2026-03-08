@@ -35,8 +35,13 @@ export async function processReturn(
 }
 
 export async function getCustomers(): Promise<CustomerOption[]> {
-  const res = await httpClient.get<CustomerOption[]>('/customers');
-  return res.data;
+  const res = await httpClient.get<{
+    total: number;
+    page: number;
+    pageSize: number;
+    items: CustomerOption[];
+  }>('/customers');
+  return res.data.items;
 }
 
 export async function createReturn(
@@ -81,4 +86,9 @@ export async function updateReturn(
 
 export async function cancelReturn(id: string): Promise<void> {
   await httpClient.patch(`/returns/${id}/cancel`);
+}
+
+export async function exportReturns(): Promise<Blob> {
+  const res = await httpClient.get('/returns/export', { responseType: 'blob' });
+  return res.data as Blob;
 }

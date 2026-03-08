@@ -6,12 +6,17 @@ import type {
   LoginRequest,
   LogoutOthersResponse,
   MeResponse,
+  RegisterRequest,
   SignupRequest,
   UpdateProfilePayload,
 } from '@/features/auth/model/types';
 
-export async function login(payload: LoginRequest): Promise<void> {
-  await httpClient.post('/auth/login', payload);
+export async function login(payload: LoginRequest): Promise<{ user: { role: string } }> {
+  const res = await httpClient.post<{ user: { role: string } }>(
+    '/auth/login',
+    payload,
+  );
+  return res.data;
 }
 
 export async function getLoginCompanies(): Promise<LoginCompaniesResponse> {
@@ -19,8 +24,27 @@ export async function getLoginCompanies(): Promise<LoginCompaniesResponse> {
   return res.data;
 }
 
+/** 회사 신규 등록 + 최초 ADMIN 계정 생성 */
+export async function register(payload: RegisterRequest): Promise<void> {
+  await httpClient.post('/auth/register', payload);
+}
+
 export async function signupRequest(payload: SignupRequest): Promise<void> {
   await httpClient.post('/auth/signup-request', payload);
+}
+
+export async function forgotPassword(payload: {
+  companyName: string;
+  email: string;
+}): Promise<void> {
+  await httpClient.post('/auth/forgot-password', payload);
+}
+
+export async function resetPassword(payload: {
+  token: string;
+  newPassword: string;
+}): Promise<void> {
+  await httpClient.post('/auth/reset-password', payload);
 }
 
 export async function getMe(): Promise<MeResponse> {
@@ -30,6 +54,13 @@ export async function getMe(): Promise<MeResponse> {
 
 export async function updateProfile(payload: UpdateProfilePayload): Promise<MeResponse> {
   const res = await httpClient.patch<MeResponse>('/auth/me', payload);
+  return res.data;
+}
+
+export async function uploadProfileImage(file: File): Promise<MeResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await httpClient.post<MeResponse>('/auth/me/avatar', formData);
   return res.data;
 }
 
@@ -96,7 +127,6 @@ export async function getCompanyUsers(
   if (params?.search) searchParams.set('search', params.search);
   if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
   if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
-  // noCache: 브라우저 캐시 우회 (승인/거절 후 refetch 시 stale 방지)
   if (options?.noCache) searchParams.set('_', String(Date.now()));
   const qs = searchParams.toString();
   const url = qs ? `/users?${qs}` : '/users';

@@ -18,17 +18,15 @@ export class ChangePasswordDto {
 
   @ApiProperty({
     example: 'NewSecret456!',
-    description: '새 비밀번호 (8자 이상, 소문자·대문자·숫자·특수문자 각 1자 이상)',
+    description:
+      '새 비밀번호 (8자 이상, 소문자·대문자·숫자·특수문자 각 1자 이상)',
     minLength: 8,
   })
   @IsString()
   @IsNotEmpty({ message: '새 비밀번호를 입력해주세요' })
-  @IsStrongPassword(
-    PASSWORD_OPTIONS,
-    {
-      message:
-        '새 비밀번호는 8자 이상이며, 소문자·대문자·숫자·특수문자(@$!%*?&#)를 각각 1자 이상 포함해야 합니다',
-    },
-  )
+  @IsStrongPassword(PASSWORD_OPTIONS, {
+    message:
+      '새 비밀번호는 8자 이상이며, 소문자·대문자·숫자·특수문자(@$!%*?&#)를 각각 1자 이상 포함해야 합니다',
+  })
   newPassword!: string;
 }

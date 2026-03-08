@@ -25,7 +25,10 @@ export class MeResponseDto {
   @ApiPropertyOptional({ example: '+821012345678', nullable: true })
   phone?: string | null;
 
-  @ApiPropertyOptional({ example: '서울시 강남구 테헤란로 123', nullable: true })
+  @ApiPropertyOptional({
+    example: '서울시 강남구 테헤란로 123',
+    nullable: true,
+  })
   addressLine1?: string | null;
 
   @ApiPropertyOptional({ example: '456호', nullable: true })
@@ -43,7 +46,10 @@ export class MeResponseDto {
   @ApiPropertyOptional({ example: 'KR', nullable: true })
   countryCode?: string | null;
 
-  @ApiPropertyOptional({ example: 'https://s3.example.com/avatar.jpg', nullable: true })
+  @ApiPropertyOptional({
+    example: 'https://s3.example.com/avatar.jpg',
+    nullable: true,
+  })
   profileImageUrl?: string | null;
 }
 

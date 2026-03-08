@@ -6,7 +6,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { InboundUploadStatus, StorageType } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { getModuleLogger } from '../../common/logging/module-logger';
 
 type ParsedRow = {
@@ -92,7 +92,8 @@ export class InboundService {
 
     // 1) "-" / 빈값 처리
     const s = toCellString(raw).trim();
-    if (!s || s === '-' || s.toUpperCase() === 'N/A' || s === '없음') return null;
+    if (!s || s === '-' || s.toUpperCase() === 'N/A' || s === '없음')
+      return null;
 
     // 2) Date 객체로 들어오는 케이스 (cellDates: true)
     if (raw instanceof Date) {
@@ -148,18 +149,29 @@ export class InboundService {
     }
   }
 
-  private parseExcel(buffer: Buffer): ParsedRow[] {
-    const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
-    const sheetName = wb.SheetNames[0];
-    if (!sheetName) throw new Error('No sheet found');
+  private async parseExcel(buffer: Buffer): Promise<ParsedRow[]> {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) throw new Error('No sheet found');
 
-    const sheet = wb.Sheets[sheetName];
-    const json: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
-      defval: '',
-      raw: true,
+    const json: Record<string, unknown>[] = [];
+    let headers: string[] = [];
+    worksheet.eachRow((row, rowNumber) => {
+      const values = row.values as unknown[];
+      if (rowNumber === 1) {
+        headers = (values?.slice(1) ?? []).map((v) =>
+          String(v ?? ''),
+        ) as string[];
+      } else {
+        const obj: Record<string, unknown> = {};
+        headers.forEach((h, i) => {
+          obj[h] = values?.[i + 1] ?? '';
+        });
+        json.push(obj);
+      }
     });
 
-    const headers = json.length > 0 ? Object.keys(json[0]) : [];
     this.ensureRequiredColumns(headers);
 
     return json.map((rawRow, idx) => {
@@ -209,7 +221,7 @@ export class InboundService {
     fileName: string;
     buffer: Buffer;
   }) {
-    const rows = this.parseExcel(params.buffer);
+    const rows = await this.parseExcel(params.buffer);
 
     const upload = await this.prisma.inboundUpload.create({
       data: {
@@ -394,6 +406,23 @@ export class InboundService {
         },
       });
 
+      // 3️⃣ Warehouse 미리 조회 (type+region별, region='default' 우선)
+      const warehouses = await tx.warehouse.findMany({
+        where: { companyId },
+        select: { id: true, type: true, region: true },
+      });
+      const warehouseByType = new Map<string, { id: string }>();
+      for (const w of warehouses) {
+        if (w.region === 'default' && !warehouseByType.has(w.type)) {
+          warehouseByType.set(w.type, { id: w.id });
+        }
+      }
+      for (const w of warehouses) {
+        if (!warehouseByType.has(w.type)) {
+          warehouseByType.set(w.type, { id: w.id });
+        }
+      }
+
       for (const row of upload.rows) {
         // 1️⃣ Item upsert
         const item = await tx.item.upsert({
@@ -464,15 +493,8 @@ export class InboundService {
           }
         }
 
-        // 3️⃣ Warehouse 찾기
-        const warehouse = await tx.warehouse.findFirst({
-          where: {
-            companyId,
-            type: row.storageType,
-          },
-          select: { id: true },
-        });
-
+        // 3️⃣ Warehouse 조회 (캐시 사용)
+        const warehouse = warehouseByType.get(row.storageType);
         if (!warehouse) {
           throw new BadRequestException(
             `Warehouse not found: ${row.storageType}`,

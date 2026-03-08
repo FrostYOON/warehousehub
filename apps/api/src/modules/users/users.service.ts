@@ -17,8 +17,10 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findActiveUserByEmail(companyId: string, email: string) {
+    const normalized = email?.trim() ?? '';
+    if (!normalized) return null;
     return this.prisma.user.findFirst({
-      where: { companyId, email, isActive: true },
+      where: { companyId, email: normalized, isActive: true },
     });
   }
 
@@ -48,16 +50,23 @@ export class UsersService {
     });
     await this.prisma.warehouse.createMany({
       data: [
-        { companyId: company.id, type: StorageType.DRY, name: 'DRY' },
+        {
+          companyId: company.id,
+          type: StorageType.DRY,
+          name: 'DRY',
+          region: 'default',
+        },
         {
           companyId: company.id,
           type: StorageType.COOL,
           name: 'COOL',
+          region: 'default',
         },
         {
           companyId: company.id,
           type: StorageType.FRZ,
           name: 'FRZ',
+          region: 'default',
         },
       ],
     });
@@ -204,10 +213,12 @@ export class UsersService {
     if (!target) throw new NotFoundException('User not found');
 
     // 본인이 자신의 역할을 ADMIN → 하위로 변경하려는 경우 차단
-    if (userId === actorUserId && target.role === Role.ADMIN && role !== Role.ADMIN) {
-      throw new ForbiddenException(
-        '본인의 관리자 역할을 제거할 수 없습니다.',
-      );
+    if (
+      userId === actorUserId &&
+      target.role === Role.ADMIN &&
+      role !== Role.ADMIN
+    ) {
+      throw new ForbiddenException('본인의 관리자 역할을 제거할 수 없습니다.');
     }
 
     const beforeRole = target.role;
@@ -260,10 +271,7 @@ export class UsersService {
     if (!target) throw new NotFoundException('User not found');
 
     // 회원 관리 API에서 본인 비활성화 차단 (withdraw는 allowSelf로 허용)
-    if (
-      !options?.allowSelf &&
-      userId === actorUserId
-    ) {
+    if (!options?.allowSelf && userId === actorUserId) {
       throw new ForbiddenException('본인 계정은 비활성화할 수 없습니다.');
     }
     // ADMIN 계정 비활성화 차단 (탈퇴 시에도 ADMIN은 유지 가능하도록 - 필요 시 검토)
@@ -306,11 +314,7 @@ export class UsersService {
     return deactivated;
   }
 
-  async activate(
-    companyId: string,
-    userId: string,
-    actorUserId: string,
-  ) {
+  async activate(companyId: string, userId: string, actorUserId: string) {
     const target = await this.prisma.user.findUnique({
       where: { id: userId, companyId },
       select: { id: true },
@@ -423,13 +427,15 @@ export class UsersService {
       data: { isActive: false },
     });
 
-    for (const uid of allowedIds) {
-      await this.createUserAuditLog({
-        userId: uid,
-        actorUserId,
-        action: 'DEACTIVATED',
-        beforeValue: JSON.stringify({ isActive: true }),
-        afterValue: JSON.stringify({ isActive: false }),
+    if (allowedIds.length > 0) {
+      await this.prisma.userAuditLog.createMany({
+        data: allowedIds.map((userId) => ({
+          userId,
+          actorUserId,
+          action: 'DEACTIVATED',
+          beforeValue: JSON.stringify({ isActive: true }),
+          afterValue: JSON.stringify({ isActive: false }),
+        })),
       });
     }
 
@@ -440,7 +446,10 @@ export class UsersService {
       actorUserId,
     });
 
-    return { deactivated: result.count, skipped: uniqueIds.length - allowedIds.length };
+    return {
+      deactivated: result.count,
+      skipped: uniqueIds.length - allowedIds.length,
+    };
   }
 
   async bulkRole(
@@ -457,8 +466,7 @@ export class UsersService {
 
     const excludable = targets.filter(
       (u) =>
-        (u.id === actorUserId && role !== Role.ADMIN) ||
-        u.role === Role.ADMIN,
+        (u.id === actorUserId && role !== Role.ADMIN) || u.role === Role.ADMIN,
     );
     const excludableIds = new Set(excludable.map((u) => u.id));
     const allowedIds = uniqueIds.filter((id) => !excludableIds.has(id));
@@ -469,20 +477,26 @@ export class UsersService {
       );
     }
 
-    for (const uid of allowedIds) {
-      const target = targets.find((t) => t.id === uid);
-      const beforeRole = target?.role;
-      await this.prisma.user.updateMany({
-        where: { id: uid, companyId },
-        data: { role },
+    const bulkUpdateResult = await this.prisma.user.updateMany({
+      where: { id: { in: allowedIds }, companyId },
+      data: { role },
+    });
+
+    if (allowedIds.length > 0 && bulkUpdateResult.count > 0) {
+      const auditData = allowedIds.map((userId) => {
+        const target = targets.find((t) => t.id === userId);
+        const beforeRole = target?.role;
+        return {
+          userId,
+          actorUserId,
+          action: 'ROLE_CHANGED' as const,
+          beforeValue: beforeRole
+            ? JSON.stringify({ role: beforeRole })
+            : null,
+          afterValue: JSON.stringify({ role }),
+        };
       });
-      await this.createUserAuditLog({
-        userId: uid,
-        actorUserId,
-        action: 'ROLE_CHANGED',
-        beforeValue: beforeRole ? JSON.stringify({ role: beforeRole }) : undefined,
-        afterValue: JSON.stringify({ role }),
-      });
+      await this.prisma.userAuditLog.createMany({ data: auditData });
     }
 
     logger.info({
@@ -493,7 +507,10 @@ export class UsersService {
       actorUserId,
     });
 
-    return { updated: allowedIds.length, skipped: uniqueIds.length - allowedIds.length };
+    return {
+      updated: allowedIds.length,
+      skipped: uniqueIds.length - allowedIds.length,
+    };
   }
 
   /**
@@ -505,7 +522,8 @@ export class UsersService {
       select: { id: true, companyId: true, isActive: true },
     });
     if (!user) throw new NotFoundException('User not found');
-    if (user.companyId !== companyId) throw new NotFoundException('User not found');
+    if (user.companyId !== companyId)
+      throw new NotFoundException('User not found');
     if (user.isActive) {
       throw new BadRequestException(
         '승인된 사용자는 삭제할 수 없습니다. 비활성화를 사용하세요.',

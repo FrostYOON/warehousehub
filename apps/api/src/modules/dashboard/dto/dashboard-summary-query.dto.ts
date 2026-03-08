@@ -44,4 +44,5 @@ export class DashboardSummaryQueryDto {
   @IsNumber()
   @Min(0)
   targetReturnRate = 2;
+
 }

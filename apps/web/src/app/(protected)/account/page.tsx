@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
 import {
   changePassword,
   updateProfile,
+  uploadProfileImage,
   withdraw,
 } from '@/features/auth/api/auth.api';
 import type { UpdateProfilePayload } from '@/features/auth/model/types';
-import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { COUNTRY_OPTIONS } from '@/shared/constants';
 import {
   PASSWORD_REQUIREMENT_TEXT,
@@ -19,6 +21,9 @@ import {
   validatePostalCode,
 } from '@/shared/utils/postal-code';
 import { useToast } from '@/shared/ui/toast/toast-provider';
+import { getErrorMessage } from '@/shared/utils/get-error-message';
+import { LOGIN_PATH } from '@/features/auth/model/constants';
+import { API_BASE_URL } from '@/shared/config/env';
 
 /** 한국 휴대폰 010XXXXXXXX (10자리) → E.164 +8210XXXXXXXX 변환 */
 function normalizePhoneE164(phone: string, countryCode?: string | null): string {
@@ -33,6 +38,7 @@ function normalizePhoneE164(phone: string, countryCode?: string | null): string 
 }
 
 export default function AccountPage() {
+  const router = useRouter();
   const {
     me,
     devices,
@@ -61,6 +67,7 @@ export default function AccountPage() {
   const [countryCode, setCountryCode] = useState(me?.countryCode ?? '');
   const [profileImageUrl, setProfileImageUrl] = useState(me?.profileImageUrl ?? '');
   const [profileSubmitting, setProfileSubmitting] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     if (!me) return;
@@ -80,12 +87,42 @@ export default function AccountPage() {
   const [newPassword, setNewPassword] = useState('');
   const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
 
   const inputClass =
     'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200';
   const labelClass = 'block text-sm font-medium text-slate-700';
   const btnPrimary =
     'h-10 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50';
+
+  const displayProfileImageUrl = profileImageUrl?.startsWith('/')
+    ? `${API_BASE_URL}${profileImageUrl}`
+    : profileImageUrl;
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !me || avatarUploading) return;
+    if (!/^image\/(jpeg|png|gif|webp)$/i.test(file.type)) {
+      showToast('이미지 파일만 업로드 가능합니다 (jpg, png, gif, webp)', 'error');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('이미지 크기는 2MB 이하여야 합니다', 'error');
+      return;
+    }
+    setAvatarUploading(true);
+    try {
+      const res = await uploadProfileImage(file);
+      setProfileImageUrl(res.profileImageUrl ?? '');
+      await refreshMe();
+      showToast('프로필 이미지가 변경되었습니다.', 'success');
+    } catch (err: unknown) {
+      showToast(getErrorMessage(err, '이미지 업로드에 실패했습니다.'), 'error');
+    } finally {
+      setAvatarUploading(false);
+      e.target.value = '';
+    }
+  }
 
   function buildProfilePayload(): UpdateProfilePayload {
     const normalizedPhone = phone.trim()
@@ -134,13 +171,10 @@ export default function AccountPage() {
       await refreshMe();
       showToast('회원정보가 수정되었습니다.', 'success');
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '회원정보 수정에 실패했습니다.', 'error');
+      showToast(
+        getErrorMessage(err, '회원정보 수정에 실패했습니다.'),
+        'error',
+      );
     } finally {
       setProfileSubmitting(false);
     }
@@ -161,20 +195,18 @@ export default function AccountPage() {
     setPasswordSubmitting(true);
     try {
       await changePassword({
-        currentPassword,
-        newPassword,
+        currentPassword: currentPassword.trim(),
+        newPassword: newPassword.trim(),
       });
       setCurrentPassword('');
       setNewPassword('');
       setNewPasswordConfirm('');
-      showToast('비밀번호가 변경되었습니다.', 'success');
+      setPasswordChangeSuccess(true);
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response
-              ?.data?.message
-          : null;
-      showToast(msg ?? '비밀번호 변경에 실패했습니다.', 'error');
+      showToast(
+        getErrorMessage(err, '비밀번호 변경에 실패했습니다.'),
+        'error',
+      );
     } finally {
       setPasswordSubmitting(false);
     }
@@ -189,29 +221,18 @@ export default function AccountPage() {
       showToast('회원 탈퇴가 완료되었습니다.', 'success');
       await signOut();
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data
-              ?.message
-          : null;
-      showToast(msg ?? '회원 탈퇴에 실패했습니다.', 'error');
+      showToast(getErrorMessage(err, '회원 탈퇴에 실패했습니다.'), 'error');
     } finally {
       setWithdrawing(false);
     }
   }
 
   return (
-    <DashboardShell
-      userName={me?.name ?? '사용자'}
-      companyName={me?.companyName ?? '회사'}
-      onLogout={signOut}
-      loggingOut={loggingOut}
-      menus={buildDashboardMenus(me?.role)}
-    >
+    <>
       {me && (
         <>
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700">
+          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow">
+            <h2 className="page-title">
               회원정보 수정
             </h2>
             <form
@@ -219,33 +240,54 @@ export default function AccountPage() {
               className="mt-3 space-y-3"
             >
               {/* 프로필 사진 */}
-              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100">
-                  {profileImageUrl ? (
-                    <img
-                      src={profileImageUrl}
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+                  {displayProfileImageUrl ? (
+                    <Image
+                      src={displayProfileImageUrl}
                       alt="프로필"
+                      width={96}
+                      height={96}
                       className="h-full w-full object-cover"
+                      unoptimized
                     />
                   ) : (
-                    <span className="text-2xl text-slate-400">
+                    <span className="text-3xl text-slate-400">
                       {profileName.charAt(0) || '?'}
                     </span>
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
-                  <label htmlFor="account-profile-image" className={labelClass}>
-                    프로필 이미지 URL
-                  </label>
-                  <input
-                    id="account-profile-image"
-                    type="url"
-                    className={inputClass}
-                    value={profileImageUrl}
-                    onChange={(e) => setProfileImageUrl(e.target.value)}
-                    disabled={profileSubmitting}
-                    placeholder="https://..."
-                  />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div>
+                    <label
+                      htmlFor="account-avatar-upload"
+                      className="inline-block rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {avatarUploading ? '업로드 중...' : '이미지 변경'}
+                    </label>
+                    <input
+                      id="account-avatar-upload"
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      className="sr-only"
+                      disabled={avatarUploading || profileSubmitting}
+                      onChange={handleAvatarChange}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="account-profile-image" className={labelClass}>
+                      또는 URL 입력
+                    </label>
+                    <input
+                      id="account-profile-image"
+                      type="url"
+                      className={inputClass}
+                      value={profileImageUrl}
+                      onChange={(e) => setProfileImageUrl(e.target.value)}
+                      disabled={profileSubmitting}
+                      placeholder="https://..."
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -422,74 +464,105 @@ export default function AccountPage() {
             </form>
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700">
+          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow">
+            {passwordChangeSuccess ? (
+              <div className="space-y-4 rounded-lg border border-emerald-200 bg-emerald-50/50 p-6">
+                <div className="flex justify-center">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-600">
+                    ✓
+                  </span>
+                </div>
+                <h2 className="text-center text-lg font-semibold text-emerald-800">
+                  비밀번호 변경 완료
+                </h2>
+                <p className="text-center text-sm text-emerald-700">
+                  비밀번호가 성공적으로 변경되었습니다.
+                  <br />
+                  새 비밀번호로 다시 로그인해주세요.
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await signOut();
+                    router.replace(LOGIN_PATH);
+                  }}
+                  disabled={loggingOut}
+                  className="h-11 w-full rounded-lg bg-emerald-700 px-4 font-medium text-white transition hover:bg-emerald-800 disabled:opacity-50"
+                >
+                  {loggingOut ? '이동 중...' : '로그인 페이지로 이동'}
+                </button>
+              </div>
+            ) : (
+              <>
+            <h2 className="page-title">
               비밀번호 변경
             </h2>
-            <form
-              onSubmit={handlePasswordSubmit}
-              className="mt-3 space-y-3"
-            >
-              <div>
-                <label htmlFor="current-password" className={labelClass}>
-                  현재 비밀번호
-                </label>
-                <input
-                  id="current-password"
-                  type="password"
-                  className={inputClass}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  disabled={passwordSubmitting}
-                  autoComplete="current-password"
-                />
-              </div>
-              <div>
-                <label htmlFor="new-password" className={labelClass}>
-                  새 비밀번호 ({PASSWORD_REQUIREMENT_TEXT})
-                </label>
-                <input
-                  id="new-password"
-                  type="password"
-                  className={inputClass}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  disabled={passwordSubmitting}
-                  autoComplete="new-password"
-                  minLength={8}
-                />
-              </div>
-              <div>
-                <label htmlFor="new-password-confirm" className={labelClass}>
-                  새 비밀번호 확인
-                </label>
-                <input
-                  id="new-password-confirm"
-                  type="password"
-                  className={inputClass}
-                  value={newPasswordConfirm}
-                  onChange={(e) => setNewPasswordConfirm(e.target.value)}
-                  disabled={passwordSubmitting}
-                  autoComplete="new-password"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={
-                  passwordSubmitting ||
-                  !currentPassword ||
-                  !newPassword ||
-                  !newPasswordConfirm
-                }
-                className={btnPrimary}
-              >
-                {passwordSubmitting ? '변경 중...' : '비밀번호 변경'}
-              </button>
-            </form>
+                <form
+                  onSubmit={handlePasswordSubmit}
+                  className="mt-3 space-y-3"
+                >
+                  <div>
+                    <label htmlFor="current-password" className={labelClass}>
+                      현재 비밀번호
+                    </label>
+                    <input
+                      id="current-password"
+                      type="password"
+                      className={inputClass}
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      disabled={passwordSubmitting}
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="new-password" className={labelClass}>
+                      새 비밀번호 ({PASSWORD_REQUIREMENT_TEXT})
+                    </label>
+                    <input
+                      id="new-password"
+                      type="password"
+                      className={inputClass}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      disabled={passwordSubmitting}
+                      autoComplete="new-password"
+                      minLength={8}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="new-password-confirm" className={labelClass}>
+                      새 비밀번호 확인
+                    </label>
+                    <input
+                      id="new-password-confirm"
+                      type="password"
+                      className={inputClass}
+                      value={newPasswordConfirm}
+                      onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                      disabled={passwordSubmitting}
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={
+                      passwordSubmitting ||
+                      !currentPassword ||
+                      !newPassword ||
+                      !newPasswordConfirm
+                    }
+                    className={btnPrimary}
+                  >
+                    {passwordSubmitting ? '변경 중...' : '비밀번호 변경'}
+                  </button>
+                </form>
+              </>
+            )}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700">회원 탈퇴</h2>
+          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-shadow hover:shadow">
+            <h2 className="page-title">회원 탈퇴</h2>
             <p className="mt-1 text-xs text-slate-500">
               탈퇴 시 계정이 비활성화되고 모든 세션에서 로그아웃됩니다. 재가입 후
               관리자 승인이 필요합니다.
@@ -518,10 +591,10 @@ export default function AccountPage() {
           </section>
         </>
       )}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="page-section">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-slate-700">
+            <h2 className="page-title">
               로그인된 디바이스
             </h2>
             <p className="text-xs text-slate-500">
@@ -585,6 +658,6 @@ export default function AccountPage() {
             ))}
         </div>
       </section>
-    </DashboardShell>
+    </>
   );
 }

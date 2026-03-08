@@ -18,6 +18,7 @@ describe('CustomersService', () => {
       findMany: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      count: jest.fn(),
     },
   };
 
@@ -133,15 +134,22 @@ describe('CustomersService', () => {
   });
 
   describe('list', () => {
+    beforeEach(() => {
+      prismaMock.customer.count.mockResolvedValue(0);
+    });
+
     it('filters by company and active status', async () => {
       prismaMock.customer.findMany.mockResolvedValueOnce([]);
 
-      await service.list('company-1');
+      const result = await service.list('company-1');
 
       expect(prismaMock.customer.findMany).toHaveBeenCalledWith({
         where: { companyId: 'company-1', isActive: true },
         orderBy: { customerName: 'asc' },
+        skip: 0,
+        take: 500,
       });
+      expect(result).toEqual({ total: 0, page: 1, pageSize: 500, items: [] });
     });
 
     it('applies search query on expected fields', async () => {
@@ -313,9 +321,9 @@ describe('CustomersService', () => {
   describe('activate', () => {
     it('throws not found when customer does not exist or is out of company', async () => {
       prismaMock.customer.findFirst.mockResolvedValueOnce(null);
-      await expect(
-        service.activate('company-1', 'customer-1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.activate('company-1', 'customer-1')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prismaMock.customer.findFirst).toHaveBeenCalledWith({
         where: { id: 'customer-1', companyId: 'company-1' },
       });

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { getLoginCompanies, login } from '@/features/auth/api/auth.api';
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 import type { LoginCompany } from '@/features/auth/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
 
@@ -52,20 +53,20 @@ export function useLoginForm() {
     setSubmitting(true);
 
     try {
-      await login({ companyName, email, password });
-      router.replace('/');
+      const res = await login({
+        companyName: companyName.trim(),
+        email: email.trim(),
+        password: password.trim(),
+      });
+      const defaultPath = res?.user?.role === 'ADMIN' ? '/' : '/stocks';
+      router.replace(defaultPath);
       router.refresh();
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        const payload = err.response?.data as { message?: string | string[] };
-        if (Array.isArray(payload?.message)) {
-          showToast(payload.message[0] ?? '로그인에 실패했습니다.', 'error');
-        } else {
-          showToast(payload?.message ?? '로그인에 실패했습니다.', 'error');
-        }
-      } else {
-        showToast('로그인에 실패했습니다.', 'error');
-      }
+      const toastMsg =
+        axios.isAxiosError(err) && err.response?.status === 401
+          ? '회사명, 이메일, 비밀번호를 확인해주세요. 비밀번호를 잊으셨다면 비밀번호 찾기를 이용해주세요.'
+          : getErrorMessage(err, '로그인에 실패했습니다.');
+      showToast(toastMsg, 'error');
     } finally {
       setSubmitting(false);
     }

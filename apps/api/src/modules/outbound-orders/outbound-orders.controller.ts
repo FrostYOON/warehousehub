@@ -8,13 +8,15 @@ import {
   UseGuards,
   Patch,
   BadRequestException,
+  Header,
+  Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Role } from '@prisma/client';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 
 type AuthedRequest = Request & {
   user: {
@@ -51,6 +53,25 @@ export class OutboundOrdersController {
   )
   list(@Req() req: AuthedRequest) {
     return this.orders.list(req.user.companyId);
+  }
+
+  @Get('export')
+  @Roles(
+    Role.ADMIN,
+    Role.WH_MANAGER,
+    Role.DELIVERY,
+    Role.ACCOUNTING,
+    Role.SALES,
+  )
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  async export(@Req() req: AuthedRequest, @Res() res: Response) {
+    const file = await this.orders.exportOutbound(req.user.companyId);
+    const fileName = `outbound-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(file);
   }
 
   @Get(':id')

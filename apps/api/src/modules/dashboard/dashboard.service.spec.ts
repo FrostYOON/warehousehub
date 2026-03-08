@@ -1,5 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { InboundUploadStatus, OutboundStatus, ReturnStatus, Role } from '@prisma/client';
+import {
+  InboundUploadStatus,
+  OutboundStatus,
+  ReturnStatus,
+  Role,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   DASHBOARD_OUTBOUND_IN_PROGRESS_STATUSES,
@@ -21,6 +26,8 @@ describe('DashboardService', () => {
     outboundOrder: { count: jest.fn() },
     returnReceipt: { count: jest.fn() },
     user: { count: jest.fn() },
+    stock: { groupBy: jest.fn() },
+    lot: { count: jest.fn() },
     outboundLine: { findMany: jest.fn() },
     returnReceiptLine: { findMany: jest.fn() },
     pickAllocation: { findMany: jest.fn() },
@@ -48,6 +55,9 @@ describe('DashboardService', () => {
     prismaMock.outboundOrder.count.mockResolvedValueOnce(11);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(5);
     prismaMock.user.count.mockResolvedValueOnce(2);
+    prismaMock.outboundOrder.count.mockResolvedValueOnce(3);
+    prismaMock.stock.groupBy.mockResolvedValueOnce([]);
+    prismaMock.lot.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(3);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(4);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(6);
@@ -67,22 +77,31 @@ describe('DashboardService', () => {
       outboundInProgress: 11,
       returnsToday: 5,
       approvalPending: 2,
+      outboundCompletedToday: 3,
+      stockShortageCount: 0,
     });
     expect(result.alerts.map((a) => a.id)).toEqual([
       'outbound-overdue',
       'inbound-invalid-pending',
       'returns-decided-pending',
     ]);
-    expect(result.alerts.map((a) => a.level)).toEqual(['critical', 'warning', 'info']);
+    expect(result.alerts.map((a) => a.level)).toEqual([
+      'critical',
+      'warning',
+      'info',
+    ]);
     expect(result.analysis.range).toBe('QUARTER');
   });
 
   it('역할별 todo를 분리한다', async () => {
+    prismaMock.stock.groupBy.mockResolvedValue([]);
+    prismaMock.lot.count.mockResolvedValue(0);
     prismaMock.item.count.mockResolvedValueOnce(1);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(2);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(3);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(4);
     prismaMock.user.count.mockResolvedValueOnce(5);
+    prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(0);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(6);
@@ -105,6 +124,7 @@ describe('DashboardService', () => {
     prismaMock.outboundOrder.count.mockResolvedValueOnce(3);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(4);
     prismaMock.user.count.mockResolvedValueOnce(5);
+    prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(0);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(6);
@@ -124,6 +144,9 @@ describe('DashboardService', () => {
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(0);
     prismaMock.user.count.mockResolvedValueOnce(0);
+    prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
+    prismaMock.stock.groupBy.mockResolvedValueOnce([]);
+    prismaMock.lot.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(0);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(0);
@@ -154,6 +177,13 @@ describe('DashboardService', () => {
     expect(prismaMock.outboundOrder.count).toHaveBeenNthCalledWith(2, {
       where: {
         companyId: 'c-1',
+        status: OutboundStatus.DELIVERED,
+        deliveredAt: expect.any(Object),
+      },
+    });
+    expect(prismaMock.outboundOrder.count).toHaveBeenNthCalledWith(3, {
+      where: {
+        companyId: 'c-1',
         plannedDate: { lt: expect.any(Date) },
         status: { in: DASHBOARD_OUTBOUND_OVERDUE_STATUSES },
       },
@@ -173,6 +203,9 @@ describe('DashboardService', () => {
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(0);
     prismaMock.user.count.mockResolvedValueOnce(0);
+    prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
+    prismaMock.stock.groupBy.mockResolvedValueOnce([]);
+    prismaMock.lot.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(1);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(1);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(1);
@@ -195,6 +228,9 @@ describe('DashboardService', () => {
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(0);
     prismaMock.user.count.mockResolvedValueOnce(0);
+    prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
+    prismaMock.stock.groupBy.mockResolvedValueOnce([]);
+    prismaMock.lot.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(0);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(0);
@@ -235,6 +271,7 @@ describe('DashboardService', () => {
           processedAt: new Date('2026-01-04T00:00:00.000Z'),
         },
       ])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([
         {
           qty: { toString: () => '1' },

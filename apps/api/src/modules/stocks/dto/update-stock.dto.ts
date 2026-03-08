@@ -12,7 +12,10 @@ export class UpdateStockDto {
   @Min(0)
   reserved!: number;
 
-  @ApiPropertyOptional({ example: '실사 보정', description: '관리자 조정 메모' })
+  @ApiPropertyOptional({
+    example: '실사 보정',
+    description: '관리자 조정 메모',
+  })
   @IsOptional()
   @IsString()
   memo?: string;

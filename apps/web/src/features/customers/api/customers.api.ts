@@ -5,20 +5,31 @@ export type ListCustomersParams = {
   q?: string;
   includeInactive?: boolean;
   isActive?: boolean;
+  page?: number;
+  pageSize?: number;
+};
+
+export type ListCustomersResponse = {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: Customer[];
 };
 
 export async function listCustomers(
   params?: ListCustomersParams,
-): Promise<Customer[]> {
+): Promise<ListCustomersResponse> {
   const searchParams = new URLSearchParams();
   if (params?.q?.trim()) searchParams.set('q', params.q.trim());
   if (params?.includeInactive === true) searchParams.set('includeInactive', 'true');
   if (params?.isActive === true) searchParams.set('isActive', 'true');
   if (params?.isActive === false) searchParams.set('isActive', 'false');
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
 
   const qs = searchParams.toString();
   const url = qs ? `/customers?${qs}` : '/customers';
-  const res = await httpClient.get<Customer[]>(url);
+  const res = await httpClient.get<ListCustomersResponse>(url);
   return res.data;
 }
 

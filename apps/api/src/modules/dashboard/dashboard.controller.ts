@@ -23,12 +23,23 @@ export class DashboardController {
   @Header('Cache-Control', 'private, max-age=15')
   @ApiQuery({ name: 'range', required: false, enum: DashboardAnalyticsRange })
   @ApiQuery({ name: 'segmentBy', required: false, enum: DashboardSegmentBy })
-  @ApiQuery({ name: 'targetReturnRate', required: false, type: Number, example: 2 })
-  @Roles(Role.ADMIN, Role.WH_MANAGER, Role.DELIVERY, Role.ACCOUNTING, Role.SALES)
+  @ApiQuery({
+    name: 'targetReturnRate',
+    required: false,
+    type: Number,
+    example: 2,
+  })
+  @Roles(
+    Role.ADMIN,
+    Role.WH_MANAGER,
+    Role.DELIVERY,
+    Role.ACCOUNTING,
+    Role.SALES,
+  )
   summary(@Req() req: Request, @Query() query: DashboardSummaryQueryDto) {
     return this.dashboard.summary(
       req.user!.companyId,
-      req.user!.role as Role,
+      req.user!.role,
       query.range,
       query.segmentBy,
       query.targetReturnRate,

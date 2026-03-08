@@ -163,7 +163,9 @@ describe('StocksService', () => {
         },
       });
     prismaMock.inventoryTx.create.mockResolvedValueOnce({ id: 'tx-1' });
-    prismaMock.$transaction.mockImplementationOnce(async (callback) => callback(prismaMock));
+    prismaMock.$transaction.mockImplementationOnce(async (callback) =>
+      callback(prismaMock),
+    );
 
     const result = await service.updateStock({
       companyId: 'company-1',
@@ -201,7 +203,9 @@ describe('StocksService', () => {
         },
       });
     prismaMock.inventoryTx.create.mockResolvedValueOnce({ id: 'tx-1' });
-    prismaMock.$transaction.mockImplementationOnce(async (callback) => callback(prismaMock));
+    prismaMock.$transaction.mockImplementationOnce(async (callback) =>
+      callback(prismaMock),
+    );
 
     const result = await service.updateStock({
       companyId: 'company-1',

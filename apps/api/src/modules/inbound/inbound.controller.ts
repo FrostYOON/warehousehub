@@ -50,7 +50,11 @@ export class InboundController {
       required: ['file'],
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    }),
+  )
   @ApiOkResponse({
     schema: { example: { id: 'uuid', invalidCount: 0 } },
   })

@@ -37,6 +37,7 @@ enum InventoryTxType {
   ADJUSTMENT // 관리자 수량 조정
   RETURN_RESTOCK // 리턴 재입고
   RETURN_DISCARD // 리턴 폐기
+  TRANSFER // 창고 간 재고 이동
 }
 
 /// 엑셀 입고 업로드 상태
@@ -85,11 +86,35 @@ enum ReturnLineDecision {
   DISCARD // 폐기
 }
 
+/// 창고 간 재고 이동 상태
+enum TransferStatus {
+  PENDING // 요청됨
+  CONFIRMED // 확정 완료
+  CANCELLED // 취소
+}
+
+/// 재고 실사 상태
+enum StocktakingStatus {
+  DRAFT // 계획 생성
+  IN_PROGRESS // 실사 입력 중
+  CONFIRMED // 확정 (재고 반영 완료)
+  CANCELLED // 취소
+}
+
 /// 하나의 회사(테넌트)
 /// 모든 데이터는 companyId 기준으로 격리됨
 model Company {
   id   String @id @default(uuid())
   name String @unique
+
+  /// 회사/창고 주소 (날씨 조회용)
+  address    String?
+  postalCode String?
+  city       String?
+  state      String?
+  country    String?  // ISO 3166-1 alpha-2
+  lat        Decimal? @db.Decimal(10, 7)
+  lng        Decimal? @db.Decimal(10, 7)
 
   users      User[]
   warehouses Warehouse[]
@@ -107,6 +132,43 @@ model Company {
   outboundOrders  OutboundOrder[]
   pickAllocations PickAllocation[]
   returnReceipts  ReturnReceipt[]
+  temperatureLogs TemperatureLog[]
+  transfers       Transfer[]
+  stocktakings    Stocktaking[]
+}
+
+/// 온도·날씨 모니터링 로그
+/// COOL(냉장 2~8°C), FRZ(냉동 -18°C 이하) 온도 기입 및 적정 여부 기록
+model TemperatureLog {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  /// 조회 시점 위치 (날씨 API용)
+  locationLat Decimal? @db.Decimal(10, 7)
+  locationLng Decimal? @db.Decimal(10, 7)
+
+  /// 외부 날씨 API 온도 (°C)
+  weatherTemp Decimal? @db.Decimal(5, 2)
+
+  /// 냉장(COOL) 측정 온도 (°C) - 적정: 2~8
+  coolTemp Decimal? @db.Decimal(5, 2)
+  coolOk   Boolean? // 2~8°C 이내면 true
+
+  /// 냉동(FRZ) 측정 온도 (°C) - 적정: -18 이하
+  frzTemp Decimal? @db.Decimal(5, 2)
+  frzOk   Boolean? // -18°C 이하면 true
+
+  /// 기입자
+  recordedByUserId String?
+  recordedByUser   User?   @relation(fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  memo String?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId])
+  @@index([companyId, createdAt])
 }
 
 /// 회사 소속 사용자
@@ -122,6 +184,10 @@ model User {
   role         Role    @default(WH_MANAGER)
   isActive     Boolean @default(true)
   lastLoginAt DateTime?
+
+  /// 비밀번호 재설정용 토큰 (forgot-password 발급)
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
 
   /// 개인정보 (optional)
   dateOfBirth    DateTime?
@@ -153,6 +219,7 @@ model User {
   returnCompletedReceipts       ReturnReceipt[]     @relation("ReturnCompletedBy")
   returnLineDecisions           ReturnReceiptLine[] @relation("ReturnLineDecidedBy")
   returnLineProcesses           ReturnReceiptLine[] @relation("ReturnLineProcessedBy")
+  temperatureLogs              TemperatureLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -183,14 +250,15 @@ model UserAuditLog {
 }
 
 /// 회사 내 창고
-/// 회사당 DRY/COOL/FRZ 각각 1개
+/// 같은 회사 내 지역별로 여러 창고 보유 가능 (예: 서울 DRY, 부산 DRY)
 model Warehouse {
   id        String  @id @default(uuid())
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  type StorageType
-  name String
+  type   StorageType
+  name   String
+  region String @default("default") // 지역 구분 (서울, 부산, default 등)
 
   stocks           Stock[]
   inventoryTxLines InventoryTxLine[]
@@ -199,7 +267,11 @@ model Warehouse {
   updatedAt       DateTime         @updatedAt
   pickAllocations PickAllocation[]
 
-  @@unique([companyId, type])
+  transfersFrom Transfer[] @relation("TransferFromWarehouse")
+  transfersTo   Transfer[] @relation("TransferToWarehouse")
+  stocktakings Stocktaking[]
+
+  @@unique([companyId, type, region])
   @@index([companyId])
 }
 
@@ -291,10 +363,12 @@ model Lot {
 
   stocks           Stock[]
   inventoryTxLines InventoryTxLine[]
+  transferLines    TransferLine[]
 
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   pickAllocations PickAllocation[]
+  stocktakingLines StocktakingLine[]
 
   @@unique([companyId, itemId, expiryDate])
   @@index([companyId, itemId])
@@ -618,4 +692,98 @@ model ReturnReceiptLine {
   @@index([itemId])
   @@index([itemId, expiryDate])
   @@index([outboundLineId])
+}
+
+/// 창고 간 재고 이동 요청
+model Transfer {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  fromWarehouseId String
+  fromWarehouse   Warehouse @relation("TransferFromWarehouse", fields: [fromWarehouseId], references: [id], onDelete: Restrict)
+  toWarehouseId   String
+  toWarehouse     Warehouse @relation("TransferToWarehouse", fields: [toWarehouseId], references: [id], onDelete: Restrict)
+
+  status TransferStatus @default(PENDING)
+  memo   String?
+
+  requestedByUserId String?
+  confirmedByUserId String?
+  confirmedAt       DateTime?
+
+  lines TransferLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([fromWarehouseId])
+  @@index([toWarehouseId])
+}
+
+/// 창고 간 재고 이동 라인 (Lot 단위)
+model TransferLine {
+  id         String  @id @default(uuid())
+  transferId String
+  transfer   Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+
+  lotId String
+  lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  qty Decimal @db.Decimal(18, 3)
+
+  createdAt DateTime @default(now())
+
+  @@index([transferId])
+  @@index([lotId])
+}
+
+/// 재고 실사 계획
+model Stocktaking {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  status StocktakingStatus @default(DRAFT)
+  memo   String?
+
+  createdByUserId String?
+  confirmedByUserId String?
+  confirmedAt      DateTime?
+
+  lines StocktakingLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([warehouseId])
+}
+
+/// 재고 실사 라인 (실제 수량 기입)
+model StocktakingLine {
+  id           String  @id @default(uuid())
+  stocktakingId String
+  stocktaking   Stocktaking @relation(fields: [stocktakingId], references: [id], onDelete: Cascade)
+
+  lotId String
+  lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  /// 시스템 재고 (실사 시점)
+  systemQty Decimal @db.Decimal(18, 3)
+  /// 실사 입력 수량
+  actualQty Decimal? @db.Decimal(18, 3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([stocktakingId, lotId])
+  @@index([stocktakingId])
+  @@index([lotId])
 }

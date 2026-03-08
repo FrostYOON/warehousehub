@@ -8,8 +8,10 @@ import {
   ReturnLineDecision,
   ReturnStatus,
 } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { getModuleLogger } from '../../common/logging/module-logger';
+import ExcelJS from 'exceljs';
 
 import { CreateReturnReceiptDto } from './dto/create-return.dto';
 import { UpdateReturnReceiptDto } from './dto/update-return.dto';
@@ -449,11 +451,21 @@ export class ReturnsService {
         }
 
         if (line.decision === ReturnLineDecision.RESTOCK) {
-          // 창고 찾기(회사당 type 유니크)
-          const wh = await tx.warehouse.findFirst({
-            where: { companyId, type: line.storageType },
+          // 창고 찾기 (type + region='default' 우선, 없으면 해당 type 첫 번째)
+          let wh = await tx.warehouse.findFirst({
+            where: {
+              companyId,
+              type: line.storageType,
+              region: 'default',
+            },
             select: { id: true },
           });
+          if (!wh) {
+            wh = await tx.warehouse.findFirst({
+              where: { companyId, type: line.storageType },
+              select: { id: true },
+            });
+          }
           if (!wh)
             throw new BadRequestException(
               'Warehouse not found for storageType',
@@ -580,5 +592,43 @@ export class ReturnsService {
         include: { customer: true, lines: { include: { item: true } } },
       });
     });
+  }
+
+  async exportReturns(companyId: string): Promise<Buffer> {
+    const receipts = await this.prisma.returnReceipt.findMany({
+      where: { companyId },
+      orderBy: { receivedAt: 'desc' },
+      include: {
+        customer: { select: { customerName: true } },
+        lines: {
+          include: {
+            item: { select: { itemCode: true, itemName: true } },
+          },
+        },
+      },
+    });
+    const rows = receipts.flatMap((r) =>
+      r.lines.map((l) => ({
+        반품접수번호: r.receiptNo,
+        상태: r.status,
+        고객사: r.customer?.customerName ?? '',
+        접수일: r.receivedAt.toISOString().slice(0, 10),
+        품목코드: l.item.itemCode,
+        품목명: l.item.itemName,
+        수량: Number(l.qty.toString()),
+        결정: l.decision ?? '',
+        처리일: l.processedAt?.toISOString().slice(0, 10) ?? '',
+      })),
+    );
+    const workbook = new ExcelJS.Workbook();
+    const ws = workbook.addWorksheet('반품내역');
+    ws.columns = Object.keys(rows[0] ?? {}).map((k) => ({
+      header: k,
+      key: k,
+      width: 14,
+    }));
+    ws.addRows(rows);
+    const buf = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buf);
   }
 }

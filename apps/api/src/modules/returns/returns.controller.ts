@@ -2,15 +2,17 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   Patch,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { Role } from '@prisma/client';
 
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -40,6 +42,19 @@ export class ReturnsController {
   @Roles(Role.ADMIN, Role.DELIVERY, Role.SALES, Role.WH_MANAGER)
   list(@Req() req: Request) {
     return this.returns.list(req.user!.companyId);
+  }
+
+  @Get('export')
+  @Roles(Role.ADMIN, Role.DELIVERY, Role.SALES, Role.WH_MANAGER)
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  async export(@Req() req: Request, @Res() res: Response) {
+    const file = await this.returns.exportReturns(req.user!.companyId);
+    const fileName = `returns-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(file);
   }
 
   @Get(':id')

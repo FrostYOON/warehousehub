@@ -1,47 +1,28 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useQueryStates } from 'nuqs';
+import { useMemo } from 'react';
 import { useAuthSession } from '@/features/auth/hooks/use-auth-session';
 import { canAccessInbound } from '@/features/auth/model/role-policy';
-import {
-  buildDashboardMenus,
-  DashboardShell,
-  SummaryGrid,
-  useDashboardSummary,
-} from '@/features/dashboard';
+import { buildDashboardMenus, SummaryGrid, useDashboardSummary } from '@/features/dashboard';
+import { dashboardParamParsers } from '@/features/dashboard/lib/dashboard-params';
 import type {
   DashboardAnalyticsRange,
   DashboardSegmentBy,
   DashboardSummary,
   DashboardSummaryResponse,
 } from '@/features/dashboard/model/types';
+import { format } from 'date-fns';
 import { AlertsWidget } from '@/features/dashboard/components/home/alerts-widget';
 import { AnalysisWidget } from '@/features/dashboard/components/home/analysis-widget';
 import { DataReliabilityBadge } from '@/features/dashboard/components/home/data-reliability-badge';
+import { InventoryInsightsWidget } from '@/features/dashboard/components/home/inventory-insights-widget';
 import { TodosWidget } from '@/features/dashboard/components/home/todos-widget';
 import { WidgetFrame } from '@/features/dashboard/components/home/widget-frame';
 import {
   type DashboardWidgetId,
   useDashboardHomeLayout,
 } from '@/features/dashboard/hooks/use-dashboard-home-layout';
-
-const RANGE_VALUES: DashboardAnalyticsRange[] = ['WEEK', 'QUARTER', 'HALF', 'YEAR'];
-const SEGMENT_VALUES: DashboardSegmentBy[] = ['WAREHOUSE_TYPE', 'CUSTOMER'];
-
-function parseRange(value: string | null): DashboardAnalyticsRange | undefined {
-  if (!value) return undefined;
-  return RANGE_VALUES.includes(value as DashboardAnalyticsRange)
-    ? (value as DashboardAnalyticsRange)
-    : undefined;
-}
-
-function parseSegment(value: string | null): DashboardSegmentBy | undefined {
-  if (!value) return undefined;
-  return SEGMENT_VALUES.includes(value as DashboardSegmentBy)
-    ? (value as DashboardSegmentBy)
-    : undefined;
-}
 
 function toCsv(rows: string[][]) {
   return rows
@@ -66,7 +47,7 @@ function buildAnalysisCsvRows(
   };
   return [
     ['리포트', '출고 분석 대시보드'],
-    ['기준시각', new Date(summary.asOf).toLocaleString()],
+    ['기준시각', format(new Date(summary.asOf), 'yyyy-MM-dd HH:mm')],
     ['집계기간', rangeLabel[range]],
     ['세그먼트', segmentByLabel[segmentBy]],
     [],
@@ -116,41 +97,19 @@ function buildAnalysisCsvRows(
 
 export function AuthHome() {
   const { me, loggingOut, signOut } = useAuthSession();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const initialRange = useMemo(() => parseRange(searchParams.get('range')), [searchParams]);
-  const initialSegmentBy = useMemo(
-    () => parseSegment(searchParams.get('segmentBy')),
-    [searchParams],
-  );
+  const [params, setParams] = useQueryStates(dashboardParamParsers, { shallow: false });
+  const { range, segmentBy, tab } = params;
+  const setRange = (v: DashboardAnalyticsRange) => setParams({ range: v });
+  const setSegmentBy = (v: DashboardSegmentBy) => setParams({ segmentBy: v });
+  const setTab = (v: (typeof params)['tab']) => setParams({ tab: v });
+
   const {
     data: summary,
     loading,
-    range,
-    setRange,
-    segmentBy,
-    setSegmentBy,
     refresh,
     autoRefreshMs,
-  } = useDashboardSummary({ initialRange, initialSegmentBy });
+  } = useDashboardSummary({ range, segmentBy });
   const role = me?.role;
-
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    let changed = false;
-    if (params.get('range') !== range) {
-      params.set('range', range);
-      changed = true;
-    }
-    if (params.get('segmentBy') !== segmentBy) {
-      params.set('segmentBy', segmentBy);
-      changed = true;
-    }
-    if (!changed) return;
-    const next = params.toString();
-    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
-  }, [pathname, range, router, searchParams, segmentBy]);
 
   const summaryItems: DashboardSummary[] = [
     {
@@ -158,6 +117,18 @@ export function AuthHome() {
       value: String(summary?.kpis.totalItems ?? '-'),
       hint: '활성 상품 마스터 건수',
       href: '/stocks',
+    },
+    {
+      title: '당일 출고 완료',
+      value: String(summary?.kpis.outboundCompletedToday ?? '-'),
+      hint: '오늘 배송(DELIVERED) 완료 건수',
+      href: '/outbound?statuses=DELIVERED',
+    },
+    {
+      title: '재고 부족',
+      value: String(summary?.kpis.stockShortageCount ?? '-'),
+      hint: '가용수량 < 0 인 품목·로트 건수',
+      href: '/stocks?shortageOnly=1',
     },
     {
       title: '출고 진행',
@@ -174,7 +145,7 @@ export function AuthHome() {
   ];
 
   if (canAccessInbound(me?.role)) {
-    summaryItems.splice(1, 0, {
+    summaryItems.splice(3, 0, {
       title: '입고 대기',
       value: String(summary?.kpis.inboundPending ?? '-'),
       hint: '확정 전 업로드 건수',
@@ -182,7 +153,6 @@ export function AuthHome() {
     });
   }
 
-  const menus = buildDashboardMenus(me?.role);
   const todos = (summary?.todos ?? []).filter((todo) => todo.value > 0);
   const alerts = (summary?.alerts ?? []).filter((alert) => alert.value > 0);
   const canSeeAlertsWidget = role === 'ADMIN' || role === 'WH_MANAGER' || role === 'DELIVERY';
@@ -203,41 +173,41 @@ export function AuthHome() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `outbound-analysis-${range}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `outbound-analysis-${range}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
+  const canSeeInventoryWidget = role === 'ADMIN' || role === 'WH_MANAGER';
+  const inventoryInsights = summary?.inventoryInsights ?? {
+    expirySoonCount: 0,
+    shortageCount: 0,
+  };
   const visibleWidgets = useMemo(() => {
     const list: DashboardWidgetId[] = [];
     if (canSeeAlertsWidget && alerts.length > 0) list.push('alerts');
     if (todos.length > 0) list.push('todos');
     if (canSeeAnalysisWidget) list.push('analysis');
+    if (canSeeInventoryWidget) list.push('inventory');
     return list;
-  }, [alerts.length, canSeeAlertsWidget, canSeeAnalysisWidget, todos.length]);
+  }, [alerts.length, canSeeAlertsWidget, canSeeAnalysisWidget, canSeeInventoryWidget, todos.length]);
 
   const { orderedVisibleWidgets, collapsed, toggleCollapsed, moveWidget } =
     useDashboardHomeLayout(visibleWidgets);
 
   return (
-    <DashboardShell
-      userName={me?.name ?? '사용자'}
-      companyName={me?.companyName ?? '회사'}
-      onLogout={signOut}
-      loggingOut={loggingOut}
-      menus={menus}
-    >
-      <SummaryGrid items={summaryItems} />
-      <section className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-xs text-slate-500">데이터 동기화 상태</p>
-            <p className="mt-0.5 text-sm text-slate-700">
-              기준 시각: {summary?.asOf ? new Date(summary.asOf).toLocaleString() : '-'}
-            </p>
-          </div>
+    <>
+      <section className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <SummaryGrid items={summaryItems} />
+        </div>
+        <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+          <p className="text-xs text-slate-500">데이터 동기화</p>
+          <p className="text-sm text-slate-700">
+            기준: {summary?.asOf ? format(new Date(summary.asOf), 'yyyy-MM-dd HH:mm') : '-'}
+          </p>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">
               자동 {Math.round(autoRefreshMs / 1000)}초
@@ -280,15 +250,25 @@ export function AuthHome() {
             </WidgetFrame>
           );
         }
+        if (id === 'inventory') {
+          return (
+            <WidgetFrame key={id} title="인벤토리 인사이트" {...frameProps}>
+              <InventoryInsightsWidget insights={inventoryInsights!} />
+            </WidgetFrame>
+          );
+        }
         if (id === 'analysis') {
           return (
             <WidgetFrame key={id} title="아이템 분석 요약" {...frameProps}>
               <AnalysisWidget
                 summary={summary}
+                loading={loading}
                 range={range}
                 setRange={setRange}
                 segmentBy={segmentBy}
                 setSegmentBy={setSegmentBy}
+                tab={tab}
+                setTab={setTab}
                 onDownloadCsv={downloadAnalysisCsv}
               />
             </WidgetFrame>
@@ -296,6 +276,6 @@ export function AuthHome() {
         }
         return null;
       })}
-    </DashboardShell>
+    </>
   );
 }

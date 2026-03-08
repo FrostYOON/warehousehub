@@ -18,6 +18,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
+import { ListCustomersQueryDto } from './dto/list-customers-query.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 
 @ApiTags('Customers')
@@ -41,20 +42,26 @@ export class CustomersController {
     Role.ACCOUNTING,
     Role.SALES,
   )
-  list(
-    @Req() req: Request,
-    @Query('q') q?: string,
-    @Query('includeInactive') includeInactive?: string,
-    @Query('isActive') isActive?: string,
-  ) {
-    const opts: { q?: string; includeInactive?: boolean; isActive?: boolean } =
-      {};
-    if (q) opts.q = q;
-    if (includeInactive === 'true') opts.includeInactive = true;
-    if (isActive === 'true' || isActive === 'false') {
-      opts.isActive = isActive === 'true';
-    }
-    return this.customers.list(req.user!.companyId, opts);
+  list(@Req() req: Request, @Query() query: ListCustomersQueryDto) {
+    return this.customers.list(req.user!.companyId, {
+      q: query.q,
+      includeInactive: query.includeInactive,
+      isActive: query.isActive,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+  }
+
+  @Get(':id')
+  @Roles(
+    Role.ADMIN,
+    Role.WH_MANAGER,
+    Role.DELIVERY,
+    Role.ACCOUNTING,
+    Role.SALES,
+  )
+  get(@Req() req: Request, @Param('id') id: string) {
+    return this.customers.findById(req.user!.companyId, id);
   }
 
   @Patch(':id')

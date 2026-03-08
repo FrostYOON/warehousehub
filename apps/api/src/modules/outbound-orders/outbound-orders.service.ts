@@ -8,6 +8,7 @@ import { CreateOutboundOrderDto } from './dto/create-outbound-order.dto';
 import { OutboundPickingService } from '../outbound-picking/outbound-picking.service';
 import { OutboundStatus, Prisma } from '@prisma/client';
 import { getModuleLogger } from '../../common/logging/module-logger';
+import ExcelJS from 'exceljs';
 
 type Tx = Prisma.TransactionClient;
 
@@ -505,7 +506,9 @@ export class OutboundOrdersService {
     }
   }
 
-  private normalizeOrderQty<T extends { lines: Array<any> } | null>(order: T): T {
+  private normalizeOrderQty<T extends { lines: Array<any> } | null>(
+    order: T,
+  ): T {
     if (!order) return order;
     return {
       ...order,
@@ -517,5 +520,44 @@ export class OutboundOrdersService {
         deliveredQty: asNumber(line.deliveredQty),
       })),
     } as T;
+  }
+
+  async exportOutbound(companyId: string): Promise<Buffer> {
+    const orders = await this.prisma.outboundOrder.findMany({
+      where: { companyId },
+      orderBy: [{ plannedDate: 'desc' }, { orderNo: 'desc' }],
+      include: {
+        customer: { select: { customerName: true } },
+        lines: {
+          include: {
+            item: { select: { itemCode: true, itemName: true } },
+          },
+        },
+      },
+    });
+    const rows = orders.flatMap((o) =>
+      o.lines.map((l) => ({
+        출고번호: o.orderNo,
+        상태: o.status,
+        고객사: o.customer?.customerName ?? '',
+        계획일: o.plannedDate.toISOString().slice(0, 10),
+        품목코드: l.item.itemCode,
+        품목명: l.item.itemName,
+        요청수량: asNumber(l.requestedQty),
+        픽수량: asNumber(l.pickedQty),
+        출고수량: asNumber(l.shippedQty),
+        배송완료수량: asNumber(l.deliveredQty),
+      })),
+    );
+    const workbook = new ExcelJS.Workbook();
+    const ws = workbook.addWorksheet('출고내역');
+    ws.columns = Object.keys(rows[0] ?? {}).map((k) => ({
+      header: k,
+      key: k,
+      width: 14,
+    }));
+    ws.addRows(rows);
+    const buf = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buf);
   }
 }

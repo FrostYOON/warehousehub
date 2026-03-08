@@ -21,7 +21,12 @@ export class InboundUploadsQueryDto {
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ example: 20, required: false, minimum: 1, maximum: 100 })
+  @ApiPropertyOptional({
+    example: 20,
+    required: false,
+    minimum: 1,
+    maximum: 100,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -38,7 +43,12 @@ export class InboundUploadDetailQueryDto {
   @Min(1)
   rowPage?: number = 1;
 
-  @ApiPropertyOptional({ example: 50, required: false, minimum: 1, maximum: 500 })
+  @ApiPropertyOptional({
+    example: 50,
+    required: false,
+    minimum: 1,
+    maximum: 500,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

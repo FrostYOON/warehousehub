@@ -8,9 +8,15 @@ import type {
 export async function getDashboardSummary(
   range: DashboardAnalyticsRange,
   segmentBy: DashboardSegmentBy,
+  options?: { noCache?: boolean },
 ): Promise<DashboardSummaryResponse> {
+  const params: Record<string, string> = { range, segmentBy };
+  const headers = options?.noCache
+    ? { 'Cache-Control': 'no-cache', Pragma: 'no-cache' }
+    : undefined;
   const res = await httpClient.get<DashboardSummaryResponse>('/dashboard/summary', {
-    params: { range, segmentBy },
+    params,
+    headers,
   });
   return res.data;
 }

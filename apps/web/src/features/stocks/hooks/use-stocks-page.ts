@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import axios from 'axios';
 import {
   exportStocks,
   getStockItems,
@@ -10,6 +9,7 @@ import {
   updateStock,
 } from '@/features/stocks/api/stocks.api';
 import type {
+  ExpirySoonDays,
   ItemAnalyticsRange,
   StockItemOption,
   StockItemTrend,
@@ -17,15 +17,7 @@ import type {
   StorageType,
 } from '@/features/stocks/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
-
-function errorMessageFromUnknown(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const payload = error.response?.data as { message?: string | string[] };
-    if (Array.isArray(payload?.message)) return payload.message[0] ?? '재고 조회에 실패했습니다.';
-    return payload?.message ?? '재고 조회에 실패했습니다.';
-  }
-  return '재고 조회에 실패했습니다.';
-}
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 
 export function useStocksPage() {
   return useStocksPageWithOptions();
@@ -36,6 +28,7 @@ export function useStocksPageWithOptions(options?: {
   analysisRange?: ItemAnalyticsRange;
   storageType?: '' | StorageType;
   itemCode?: string;
+  expirySoon?: ExpirySoonDays;
   page?: number;
   pageSize?: number;
 }) {
@@ -45,6 +38,7 @@ export function useStocksPageWithOptions(options?: {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [storageType, setStorageType] = useState<'' | StorageType>(options?.storageType ?? '');
   const [itemCode, setItemCode] = useState(options?.itemCode ?? '');
+  const [expirySoon, setExpirySoon] = useState<ExpirySoonDays | undefined>(options?.expirySoon);
   const [analysisItems, setAnalysisItems] = useState<StockItemOption[]>([]);
   const [analysisItemId, setAnalysisItemId] = useState(options?.analysisItemId ?? '');
   const [analysisRange, setAnalysisRange] = useState<ItemAnalyticsRange>(
@@ -59,6 +53,7 @@ export function useStocksPageWithOptions(options?: {
   const initialFiltersRef = useRef({
     storageType: options?.storageType ?? '',
     itemCode: options?.itemCode ?? '',
+    expirySoon: options?.expirySoon,
     page: options?.page ?? 1,
     pageSize: options?.pageSize ?? 50,
   });
@@ -67,6 +62,7 @@ export function useStocksPageWithOptions(options?: {
     async (params?: {
       storageType?: StorageType;
       itemCode?: string;
+      expirySoon?: ExpirySoonDays;
       page?: number;
       pageSize?: number;
       append?: boolean;
@@ -76,6 +72,7 @@ export function useStocksPageWithOptions(options?: {
         const data = await getStocks({
           storageType: params?.storageType,
           itemCode: params?.itemCode,
+          expirySoon: params?.expirySoon,
           page: params?.page ?? 1,
           pageSize: params?.pageSize ?? 50,
         });
@@ -85,7 +82,7 @@ export function useStocksPageWithOptions(options?: {
         setTotal(data.total);
         setTotalPages(data.totalPages);
       } catch (error) {
-        showToast(errorMessageFromUnknown(error), 'error');
+        showToast(getErrorMessage(error, '재고 조회에 실패했습니다.'), 'error');
       } finally {
         setLoading(false);
       }
@@ -98,21 +95,24 @@ export function useStocksPageWithOptions(options?: {
     nextPageSize?: number;
     append?: boolean;
     storageType?: StorageType | '';
+    expirySoon?: ExpirySoonDays;
   }) => {
     await fetchStocks({
       storageType: (params?.storageType ?? storageType) || undefined,
       itemCode: itemCode || undefined,
+      expirySoon: params?.expirySoon ?? expirySoon,
       page: params?.nextPage ?? 1,
       pageSize: params?.nextPageSize ?? pageSize,
       append: params?.append,
     });
-  }, [fetchStocks, itemCode, pageSize, storageType]);
+  }, [fetchStocks, itemCode, expirySoon, pageSize, storageType]);
 
   useEffect(() => {
     const initial = initialFiltersRef.current;
     void fetchStocks({
       storageType: initial.storageType || undefined,
       itemCode: initial.itemCode || undefined,
+      expirySoon: initial.expirySoon,
       page: initial.page,
       pageSize: initial.pageSize,
     });
@@ -124,7 +124,7 @@ export function useStocksPageWithOptions(options?: {
       setAnalysisItems(items);
       setAnalysisItemId((prev) => prev || items[0]?.id || '');
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '재고 조회에 실패했습니다.'), 'error');
     }
   }, [showToast]);
 
@@ -142,7 +142,7 @@ export function useStocksPageWithOptions(options?: {
       const trend = await getStockItemTrend(analysisItemId, analysisRange);
       setAnalysisTrend(trend);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '재고 조회에 실패했습니다.'), 'error');
     } finally {
       setAnalysisLoading(false);
     }
@@ -155,12 +155,14 @@ export function useStocksPageWithOptions(options?: {
   function resetFilters() {
     setStorageType('');
     setItemCode('');
+    setExpirySoon(undefined);
   }
 
   async function resetFiltersAndReload() {
     setStorageType('');
     setItemCode('');
-    await fetchStocks({ page: 1, pageSize, append: false });
+    setExpirySoon(undefined);
+    await fetchStocks({ page: 1, pageSize, expirySoon: undefined, append: false });
   }
 
   async function updateStockRow(params: {
@@ -179,7 +181,7 @@ export function useStocksPageWithOptions(options?: {
       setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
       showToast('재고를 수정했습니다.', 'success');
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '재고 조회에 실패했습니다.'), 'error');
     } finally {
       setUpdatingStockId(null);
     }
@@ -190,6 +192,7 @@ export function useStocksPageWithOptions(options?: {
       const blob = await exportStocks({
         storageType: storageType || undefined,
         itemCode: itemCode || undefined,
+        expirySoon,
       });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -201,7 +204,7 @@ export function useStocksPageWithOptions(options?: {
       window.URL.revokeObjectURL(url);
       showToast('재고 엑셀 다운로드를 시작했습니다.', 'success');
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '재고 조회에 실패했습니다.'), 'error');
     }
   }
 
@@ -211,6 +214,8 @@ export function useStocksPageWithOptions(options?: {
     analysisLoading,
     storageType,
     itemCode,
+    expirySoon,
+    setExpirySoon,
     analysisItems,
     analysisItemId,
     analysisRange,

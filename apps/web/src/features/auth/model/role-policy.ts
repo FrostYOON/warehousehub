@@ -5,9 +5,30 @@ const INBOUND_ALLOWED_ROLES: ReadonlySet<UserRole> = new Set([
   'WH_MANAGER',
 ]);
 
-const CUSTOMERS_ALLOWED_ROLES: ReadonlySet<UserRole> = new Set([
+const TEMPERATURE_MONITOR_ROLES: ReadonlySet<UserRole> = new Set([
   'ADMIN',
   'WH_MANAGER',
+]);
+
+const RETURN_MANAGE_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'WH_MANAGER',
+]);
+
+const RETURN_CREATE_EDIT_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'DELIVERY',
+  'SALES',
+]);
+
+const OUTBOUND_EDIT_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'SALES',
+]);
+
+const OUTBOUND_CANCEL_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'SALES',
 ]);
 
 export function canAccessInbound(role?: UserRole): boolean {
@@ -15,7 +36,52 @@ export function canAccessInbound(role?: UserRole): boolean {
   return INBOUND_ALLOWED_ROLES.has(role);
 }
 
-export function canAccessCustomers(role?: UserRole): boolean {
+/** 온도 모니터: ADMIN, WH_MANAGER만 접근·기입 */
+export function canAccessTemperatureMonitor(role?: UserRole): boolean {
   if (!role) return false;
-  return CUSTOMERS_ALLOWED_ROLES.has(role);
+  return TEMPERATURE_MONITOR_ROLES.has(role);
+}
+
+/** 대시보드: ADMIN만 접근 */
+export function canAccessDashboard(role?: UserRole): boolean {
+  return role === 'ADMIN';
+}
+
+/** 회원 승인/관리: ADMIN만 */
+export function canAccessMembers(role?: UserRole): boolean {
+  return role === 'ADMIN';
+}
+
+/** 고객사: 전체 역할 접근 가능 */
+export function canAccessCustomers(_role?: UserRole): boolean {
+  return true;
+}
+
+/** 재고 수량 조정: ADMIN만 */
+export function canEditStock(role?: UserRole): boolean {
+  return role === 'ADMIN';
+}
+
+/** 출고 오더 취소: ADMIN, SALES */
+export function canCancelOrder(role?: UserRole): boolean {
+  if (!role) return false;
+  return OUTBOUND_CANCEL_ROLES.has(role);
+}
+
+/** 반품 결정(decide)/처리(process): ADMIN, WH_MANAGER */
+export function canProcessReturn(role?: UserRole): boolean {
+  if (!role) return false;
+  return RETURN_MANAGE_ROLES.has(role);
+}
+
+/** 반품 접수 생성/수정/취소: ADMIN, DELIVERY, SALES */
+export function canEditReturnReceipt(role?: UserRole): boolean {
+  if (!role) return false;
+  return RETURN_CREATE_EDIT_ROLES.has(role);
+}
+
+/** 출고 오더 생성/수정: ADMIN, SALES (상태 검사는 호출측) */
+export function canEditOutboundOrder(role?: UserRole): boolean {
+  if (!role) return false;
+  return OUTBOUND_EDIT_ROLES.has(role);
 }

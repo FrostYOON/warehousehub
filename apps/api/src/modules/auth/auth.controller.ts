@@ -1,5 +1,6 @@
 // apps/api/src/modules/auth/auth.controller.ts
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,15 +8,20 @@ import {
   Param,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupRequestDto } from './dto/signup-request.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -55,6 +61,7 @@ export class AuthController {
   }
 
   @Post('register')
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 req/min
   @SetAuthCookies()
   @ApiOkResponse({ type: LoginResponseDto })
   register(@Body() dto: RegisterDto, @RequestMeta() meta: RequestMetaType) {
@@ -62,16 +69,31 @@ export class AuthController {
   }
 
   @Post('signup-request')
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 req/min
   @ApiOkResponse({ type: OkResponseDto })
   signupRequest(@Body() dto: SignupRequestDto) {
     return this.auth.signupRequest(dto);
   }
 
   @Post('login')
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 req/min
   @SetAuthCookies()
   @ApiOkResponse({ type: LoginResponseDto })
   login(@Body() dto: LoginDto, @RequestMeta() meta: RequestMetaType) {
     return this.auth.login(dto, meta);
+  }
+
+  @Post('forgot-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 req/min
+  @ApiOkResponse({ type: OkResponseDto })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.auth.requestPasswordReset(dto);
+  }
+
+  @Post('reset-password')
+  @ApiOkResponse({ type: OkResponseDto })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetPassword(dto);
   }
 
   @Post('refresh')
@@ -109,6 +131,27 @@ export class AuthController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.auth.updateProfile(user.userId, dto);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('me/avatar')
+  @ApiBearerAuth('access-token')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+      fileFilter: (_, file, cb) => {
+        const allowed = /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype);
+        cb(null, allowed);
+      },
+    }),
+  )
+  @ApiOkResponse({ type: MeResponseDto })
+  uploadAvatar(
+    @CurrentUser() user: CurrentUserPayload,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('file is required');
+    return this.auth.uploadProfileImage(user.userId, file);
   }
 
   @UseGuards(AuthGuard('jwt'))

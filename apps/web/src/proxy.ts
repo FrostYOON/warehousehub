@@ -3,10 +3,19 @@ import { NextResponse } from 'next/server';
 import {
   ACCESS_COOKIE_NAME,
   LOGIN_PATH,
+  REGISTER_PATH,
   SIGNUP_PATH,
+  FORGOT_PASSWORD_PATH,
+  RESET_PASSWORD_PATH,
 } from '@/features/auth/model/constants';
 
-const PUBLIC_PATHS = [LOGIN_PATH, SIGNUP_PATH];
+const PUBLIC_PATHS = [
+  LOGIN_PATH,
+  REGISTER_PATH,
+  SIGNUP_PATH,
+  FORGOT_PASSWORD_PATH,
+  RESET_PASSWORD_PATH,
+];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.includes(pathname);

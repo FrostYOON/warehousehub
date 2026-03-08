@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-export type DashboardWidgetId = 'alerts' | 'todos' | 'analysis';
+export type DashboardWidgetId = 'alerts' | 'todos' | 'analysis' | 'inventory';
 
 const ORDER_KEY = 'dashboard.home.widgetOrder.v1';
 const COLLAPSE_KEY = 'dashboard.home.widgetCollapse.v1';
@@ -16,7 +16,8 @@ function readOrder(): DashboardWidgetId[] {
       (value): value is DashboardWidgetId =>
         value === 'alerts' ||
         value === 'todos' ||
-        value === 'analysis',
+        value === 'analysis' ||
+        value === 'inventory',
     );
   } catch {
     return [];
@@ -27,16 +28,17 @@ function readCollapsed(): Record<DashboardWidgetId, boolean> {
   try {
     const raw = window.localStorage.getItem(COLLAPSE_KEY);
     if (!raw) {
-      return { alerts: false, todos: false, analysis: false };
+      return { alerts: false, todos: false, analysis: false, inventory: false };
     }
     const parsed = JSON.parse(raw) as Partial<Record<DashboardWidgetId, boolean>>;
     return {
       alerts: Boolean(parsed.alerts),
       todos: Boolean(parsed.todos),
       analysis: Boolean(parsed.analysis),
+      inventory: Boolean(parsed.inventory),
     };
   } catch {
-    return { alerts: false, todos: false, analysis: false };
+    return { alerts: false, todos: false, analysis: false, inventory: false };
   }
 }
 
@@ -47,7 +49,7 @@ export function useDashboardHomeLayout(visibleWidgets: DashboardWidgetId[]) {
   });
   const [collapsed, setCollapsed] = useState<Record<DashboardWidgetId, boolean>>(() => {
     if (typeof window === 'undefined') {
-      return { alerts: false, todos: false, analysis: false };
+      return { alerts: false, todos: false, analysis: false, inventory: false };
     }
     return readCollapsed();
   });

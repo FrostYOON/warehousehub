@@ -3,7 +3,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
-import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 
 export default function ApprovalsPage() {
   const router = useRouter();
@@ -13,8 +12,6 @@ export default function ApprovalsPage() {
     loadingPendingUsers,
     approveActionId,
     rejectActionId,
-    loggingOut,
-    signOut,
     approveUser,
     rejectUser,
   } = useAuthSession();
@@ -26,17 +23,10 @@ export default function ApprovalsPage() {
   }, [me, router]);
 
   return (
-    <DashboardShell
-      userName={me?.name ?? '사용자'}
-      companyName={me?.companyName ?? '회사'}
-      onLogout={signOut}
-      loggingOut={loggingOut}
-      menus={buildDashboardMenus(me?.role)}
-    >
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-3">
-          <h2 className="text-sm font-semibold text-slate-700">회원가입 승인</h2>
-          <p className="text-xs text-slate-500">
+    <section className="page-section">
+        <div className="mb-4">
+          <h2 className="page-title">회원가입 승인</h2>
+          <p className="page-description">
             같은 회사의 가입 신청 계정을 승인할 수 있습니다.
           </p>
         </div>
@@ -55,7 +45,7 @@ export default function ApprovalsPage() {
             {pendingUsers.map((user) => (
               <div
                 key={user.id}
-                className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   <p className="text-sm font-medium text-slate-800">{user.name}</p>
@@ -88,7 +78,6 @@ export default function ApprovalsPage() {
             ))}
           </div>
         )}
-      </section>
-    </DashboardShell>
+    </section>
   );
 }

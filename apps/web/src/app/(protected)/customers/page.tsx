@@ -3,18 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
-import {
-  activateCustomer,
-  createCustomer,
-  deactivateCustomer,
-  listCustomers,
-  updateCustomer,
-} from '@/features/customers/api/customers.api';
+import { useCustomersQuery } from '@/features/customers/hooks/use-customers-query';
 import type { Customer, CreateCustomerPayload } from '@/features/customers/model/types';
-import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
 import { COUNTRY_OPTIONS, getCountryLabel } from '@/shared/constants';
 import { getPostalCodeInfo, validatePostalCode } from '@/shared/utils/postal-code';
 import { useToast } from '@/shared/ui/toast/toast-provider';
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 
 const INIT_FORM: CreateCustomerPayload & Record<string, string> = {
   customerCode: '',
@@ -28,23 +22,32 @@ const INIT_FORM: CreateCustomerPayload & Record<string, string> = {
 
 export default function CustomersPage() {
   const router = useRouter();
-  const { me, loggingOut, signOut } = useAuthSession();
+  const { me } = useAuthSession();
   const { showToast } = useToast();
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterIsActive, setFilterIsActive] = useState<string>('all');
   const [actionId, setActionId] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addForm, setAddForm] = useState(INIT_FORM);
-  const [addSubmitting, setAddSubmitting] = useState(false);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [editForm, setEditForm] = useState(INIT_FORM);
-  const [editSubmitting, setEditSubmitting] = useState(false);
 
   const canAccess = me?.role === 'ADMIN' || me?.role === 'WH_MANAGER';
+
+  const {
+    items: customers,
+    total,
+    loading,
+    createMutation,
+    updateMutation,
+    deactivateMutation,
+    activateMutation,
+  } = useCustomersQuery({
+    q: search,
+    filterIsActive,
+    enabled: canAccess ?? false,
+  });
 
   useEffect(() => {
     if (me && !canAccess) {
@@ -52,50 +55,16 @@ export default function CustomersPage() {
     }
   }, [me, canAccess, router]);
 
-  useEffect(() => {
-    if (!canAccess) return;
-    const params: { q?: string; includeInactive?: boolean; isActive?: boolean } =
-      {};
-    if (search.trim()) params.q = search.trim();
-    if (filterIsActive === 'all') params.includeInactive = true;
-    else if (filterIsActive === 'true') params.isActive = true;
-    else if (filterIsActive === 'false') params.isActive = false;
-
-    let alive = true;
-    setLoading(true);
-    listCustomers(params)
-      .then((data) => {
-        if (alive) setCustomers(data);
-      })
-      .catch(() => {
-        if (alive) showToast('고객사 목록을 불러오지 못했습니다.', 'error');
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [canAccess, search, filterIsActive, showToast, refreshKey]);
-
   async function handleDeactivate(customer: Customer) {
     setActionId(customer.id);
     try {
-      await deactivateCustomer(customer.id);
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.id === customer.id ? { ...c, isActive: false } : c,
-        ),
-      );
+      await deactivateMutation.mutateAsync(customer.id);
       showToast(`${customer.customerName}을(를) 비활성화했습니다.`, 'success');
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '비활성화 처리에 실패했습니다.', 'error');
+      showToast(
+        getErrorMessage(err, '비활성화 처리에 실패했습니다.'),
+        'error',
+      );
     } finally {
       setActionId(null);
     }
@@ -104,21 +73,13 @@ export default function CustomersPage() {
   async function handleActivate(customer: Customer) {
     setActionId(customer.id);
     try {
-      await activateCustomer(customer.id);
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.id === customer.id ? { ...c, isActive: true } : c,
-        ),
-      );
+      await activateMutation.mutateAsync(customer.id);
       showToast(`${customer.customerName}을(를) 활성화했습니다.`, 'success');
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '활성화 처리에 실패했습니다.', 'error');
+      showToast(
+        getErrorMessage(err, '활성화 처리에 실패했습니다.'),
+        'error',
+      );
     } finally {
       setActionId(null);
     }
@@ -139,7 +100,7 @@ export default function CustomersPage() {
 
   async function handleAddSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (addSubmitting || !addForm.customerName.trim() || !addForm.customerAddress.trim())
+    if (createMutation.isPending || !addForm.customerName.trim() || !addForm.customerAddress.trim())
       return;
     const pcValidation = validatePostalCode(
       addForm.postalCode ?? '',
@@ -149,9 +110,8 @@ export default function CustomersPage() {
       showToast(pcValidation.message ?? '올바른 형식이 아닙니다.', 'error');
       return;
     }
-    setAddSubmitting(true);
     try {
-      await createCustomer({
+      await createMutation.mutateAsync({
         ...((addForm.customerCode ?? '').trim() && {
           customerCode: (addForm.customerCode ?? '').trim(),
         }),
@@ -172,24 +132,15 @@ export default function CustomersPage() {
       });
       setAddForm(INIT_FORM);
       setIsAddModalOpen(false);
-      setRefreshKey((k) => k + 1);
       showToast('고객사가 추가되었습니다.', 'success');
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '고객사 추가에 실패했습니다.', 'error');
-    } finally {
-      setAddSubmitting(false);
+      showToast(getErrorMessage(err, '고객사 추가에 실패했습니다.'), 'error');
     }
   }
 
   async function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editCustomer || editSubmitting || !editForm.customerName.trim() || !editForm.customerAddress.trim())
+    if (!editCustomer || updateMutation.isPending || !editForm.customerName.trim() || !editForm.customerAddress.trim())
       return;
     const pcValidation = validatePostalCode(
       editForm.postalCode ?? '',
@@ -199,46 +150,32 @@ export default function CustomersPage() {
       showToast(pcValidation.message ?? '올바른 형식이 아닙니다.', 'error');
       return;
     }
-    setEditSubmitting(true);
     try {
-      await updateCustomer(editCustomer.id, {
-        customerCode: (editForm.customerCode ?? '').trim(),
-        customerName: editForm.customerName.trim(),
-        customerAddress: editForm.customerAddress.trim(),
-        postalCode: editForm.postalCode?.trim() ?? '',
-        city: editForm.city?.trim() ?? '',
-        state: editForm.state?.trim() ?? '',
-        country: editForm.country?.trim() ?? '',
+      await updateMutation.mutateAsync({
+        id: editCustomer.id,
+        payload: {
+          customerCode: (editForm.customerCode ?? '').trim(),
+          customerName: editForm.customerName.trim(),
+          customerAddress: editForm.customerAddress.trim(),
+          postalCode: editForm.postalCode?.trim() ?? '',
+          city: editForm.city?.trim() ?? '',
+          state: editForm.state?.trim() ?? '',
+          country: editForm.country?.trim() ?? '',
+        },
       });
       setEditCustomer(null);
-      setRefreshKey((k) => k + 1);
       showToast('고객사가 수정되었습니다.', 'success');
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string | string[] } } })
-              .response?.data?.message
-          : null;
-      const message = Array.isArray(msg) ? msg[0] : msg;
-      showToast(message ?? '고객사 수정에 실패했습니다.', 'error');
-    } finally {
-      setEditSubmitting(false);
+      showToast(getErrorMessage(err, '고객사 수정에 실패했습니다.'), 'error');
     }
   }
 
   return (
-    <DashboardShell
-      userName={me?.name ?? '사용자'}
-      companyName={me?.companyName ?? '회사'}
-      onLogout={signOut}
-      loggingOut={loggingOut}
-      menus={buildDashboardMenus(me?.role)}
-    >
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="page-section">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-slate-700">고객사 관리</h2>
-            <p className="text-xs text-slate-500">
+            <h2 className="page-title">고객사 관리</h2>
+            <p className="page-description">
               고객사 목록을 조회하고 등록·수정·비활성화할 수 있습니다.
             </p>
           </div>
@@ -257,12 +194,12 @@ export default function CustomersPage() {
             placeholder="코드·고객사명·주소·도시 등 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 w-56 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+            className="form-input h-9 w-56"
           />
           <select
             value={filterIsActive}
             onChange={(e) => setFilterIsActive(e.target.value)}
-            className="h-9 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+            className="form-select h-9"
           >
             <option value="all">전체 상태</option>
             <option value="true">활성</option>
@@ -277,51 +214,57 @@ export default function CustomersPage() {
         )}
 
         {!loading && customers.length === 0 && (
-          <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            조건에 맞는 고객사가 없습니다.
-          </p>
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50/50 px-6 py-12 text-center">
+            <p className="text-sm text-slate-600">
+              조건에 맞는 고객사가 없습니다.
+            </p>
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              첫 고객사 추가하기
+            </button>
+          </div>
         )}
 
         {!loading && customers.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
+          <div className="table-wrapper">
+            <table className="data-table min-w-[720px]">
               <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-600">
-                  <th className="pb-2 pr-4">코드</th>
-                  <th className="pb-2 pr-4">고객사명</th>
-                  <th className="pb-2 pr-4">주소</th>
-                  <th className="pb-2 pr-4">우편번호</th>
-                  <th className="pb-2 pr-4">도시</th>
-                  <th className="pb-2 pr-4">주/도</th>
-                  <th className="pb-2 pr-4">국가</th>
-                  <th className="pb-2 pr-4">상태</th>
-                  <th className="pb-2">작업</th>
+                <tr>
+                  <th>코드</th>
+                  <th>고객사명</th>
+                  <th>주소</th>
+                  <th>우편번호</th>
+                  <th>도시</th>
+                  <th>주/도</th>
+                  <th>국가</th>
+                  <th>상태</th>
+                  <th>작업</th>
                 </tr>
               </thead>
               <tbody>
                 {customers.map((c) => (
-                  <tr
-                    key={c.id}
-                    className="border-b border-slate-100 last:border-0"
-                  >
-                    <td className="py-3 pr-4 text-slate-600">
+                  <tr key={c.id}>
+                    <td className="text-slate-600">
                       {c.customerCode ?? '-'}
                     </td>
-                    <td className="py-3 pr-4 font-medium text-slate-800">
+                    <td className="font-medium text-slate-800">
                       {c.customerName}
                     </td>
-                    <td className="py-3 pr-4 text-slate-600">
+                    <td className="text-slate-600">
                       {c.customerAddress}
                     </td>
-                    <td className="py-3 pr-4 text-slate-600">
+                    <td className="text-slate-600">
                       {c.postalCode ?? '-'}
                     </td>
-                    <td className="py-3 pr-4 text-slate-600">{c.city ?? '-'}</td>
-                    <td className="py-3 pr-4 text-slate-600">{c.state ?? '-'}</td>
-                    <td className="py-3 pr-4 text-slate-600">
+                    <td className="text-slate-600">{c.city ?? '-'}</td>
+                    <td className="text-slate-600">{c.state ?? '-'}</td>
+                    <td className="text-slate-600">
                       {getCountryLabel(c.country)}
                     </td>
-                    <td className="py-3 pr-4">
+                    <td>
                       <span
                         className={
                           c.isActive
@@ -332,7 +275,7 @@ export default function CustomersPage() {
                         {c.isActive ? '활성' : '비활성'}
                       </span>
                     </td>
-                    <td className="py-3">
+                    <td>
                       <div className="flex flex-wrap items-center gap-1">
                         <button
                           type="button"
@@ -371,7 +314,7 @@ export default function CustomersPage() {
 
         {!loading && customers.length > 0 && (
           <p className="mt-3 text-xs text-slate-500">
-            총 {customers.length}건
+            총 {total}건
           </p>
         )}
 
@@ -396,8 +339,8 @@ export default function CustomersPage() {
                     onChange={(e) =>
                       setAddForm((f) => ({ ...f, customerCode: e.target.value }))
                     }
-                    disabled={addSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={createMutation.isPending}
+                    className="form-input mt-1"
                     placeholder="ERP 코드 등 (선택)"
                   />
                 </div>
@@ -416,8 +359,8 @@ export default function CustomersPage() {
                     onChange={(e) =>
                       setAddForm((f) => ({ ...f, customerName: e.target.value }))
                     }
-                    disabled={addSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={createMutation.isPending}
+                    className="form-input mt-1"
                     placeholder="(주)예시물류"
                   />
                 </div>
@@ -439,8 +382,8 @@ export default function CustomersPage() {
                         customerAddress: e.target.value,
                       }))
                     }
-                    disabled={addSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={createMutation.isPending}
+                    className="form-input mt-1"
                     placeholder="서울시 강남구 테헤란로 123"
                   />
                 </div>
@@ -457,8 +400,8 @@ export default function CustomersPage() {
                     onChange={(e) =>
                       setAddForm((f) => ({ ...f, country: e.target.value }))
                     }
-                    disabled={addSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={createMutation.isPending}
+                    className="form-select mt-1"
                   >
                     {COUNTRY_OPTIONS.map((o) => (
                       <option key={o.value || 'empty'} value={o.value}>
@@ -481,8 +424,8 @@ export default function CustomersPage() {
                     onChange={(e) =>
                       setAddForm((f) => ({ ...f, postalCode: e.target.value }))
                     }
-                    disabled={addSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={createMutation.isPending}
+                    className="form-input mt-1"
                     placeholder={
                       getPostalCodeInfo(addForm.country)?.example ?? '06134'
                     }
@@ -508,8 +451,8 @@ export default function CustomersPage() {
                       onChange={(e) =>
                         setAddForm((f) => ({ ...f, city: e.target.value }))
                       }
-                      disabled={addSubmitting}
-                      className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                      disabled={createMutation.isPending}
+                      className="form-input mt-1"
                       placeholder="서울"
                     />
                   </div>
@@ -527,8 +470,8 @@ export default function CustomersPage() {
                       onChange={(e) =>
                         setAddForm((f) => ({ ...f, state: e.target.value }))
                       }
-                      disabled={addSubmitting}
-                      className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                      disabled={createMutation.isPending}
+                      className="form-input mt-1"
                       placeholder="강남구"
                     />
                   </div>
@@ -537,17 +480,17 @@ export default function CustomersPage() {
                   <button
                     type="button"
                     onClick={() => setIsAddModalOpen(false)}
-                    disabled={addSubmitting}
+                    disabled={createMutation.isPending}
                     className="h-9 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-100 disabled:opacity-50"
                   >
                     취소
                   </button>
                   <button
                     type="submit"
-                    disabled={addSubmitting}
+                    disabled={createMutation.isPending}
                     className="h-9 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
                   >
-                    {addSubmitting ? '추가 중...' : '추가'}
+                    {createMutation.isPending ? '추가 중...' : '추가'}
                   </button>
                 </div>
               </form>
@@ -576,8 +519,8 @@ export default function CustomersPage() {
                     onChange={(e) =>
                       setEditForm((f) => ({ ...f, customerCode: e.target.value }))
                     }
-                    disabled={editSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={updateMutation.isPending}
+                    className="form-input mt-1"
                     placeholder="ERP 코드 등 (선택)"
                   />
                 </div>
@@ -596,8 +539,8 @@ export default function CustomersPage() {
                     onChange={(e) =>
                       setEditForm((f) => ({ ...f, customerName: e.target.value }))
                     }
-                    disabled={editSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={updateMutation.isPending}
+                    className="form-input mt-1"
                   />
                 </div>
                 <div>
@@ -618,8 +561,8 @@ export default function CustomersPage() {
                         customerAddress: e.target.value,
                       }))
                     }
-                    disabled={editSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={updateMutation.isPending}
+                    className="form-input mt-1"
                   />
                 </div>
                 <div>
@@ -635,8 +578,8 @@ export default function CustomersPage() {
                     onChange={(e) =>
                       setEditForm((f) => ({ ...f, country: e.target.value }))
                     }
-                    disabled={editSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={updateMutation.isPending}
+                    className="form-select mt-1"
                   >
                     {COUNTRY_OPTIONS.map((o) => (
                       <option key={o.value || 'empty'} value={o.value}>
@@ -659,8 +602,8 @@ export default function CustomersPage() {
                     onChange={(e) =>
                       setEditForm((f) => ({ ...f, postalCode: e.target.value }))
                     }
-                    disabled={editSubmitting}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                    disabled={updateMutation.isPending}
+                    className="form-input mt-1"
                     placeholder={
                       getPostalCodeInfo(editForm.country)?.example ?? '06134'
                     }
@@ -686,8 +629,8 @@ export default function CustomersPage() {
                       onChange={(e) =>
                         setEditForm((f) => ({ ...f, city: e.target.value }))
                       }
-                      disabled={editSubmitting}
-                      className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                      disabled={updateMutation.isPending}
+                      className="form-input mt-1"
                     />
                   </div>
                   <div>
@@ -704,8 +647,8 @@ export default function CustomersPage() {
                       onChange={(e) =>
                         setEditForm((f) => ({ ...f, state: e.target.value }))
                       }
-                      disabled={editSubmitting}
-                      className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400"
+                      disabled={updateMutation.isPending}
+                      className="form-input mt-1"
                     />
                   </div>
                 </div>
@@ -713,17 +656,17 @@ export default function CustomersPage() {
                   <button
                     type="button"
                     onClick={() => setEditCustomer(null)}
-                    disabled={editSubmitting}
+                    disabled={updateMutation.isPending}
                     className="h-9 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-100 disabled:opacity-50"
                   >
                     취소
                   </button>
                   <button
                     type="submit"
-                    disabled={editSubmitting}
+                    disabled={updateMutation.isPending}
                     className="h-9 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
                   >
-                    {editSubmitting ? '수정 중...' : '수정'}
+                    {updateMutation.isPending ? '수정 중...' : '수정'}
                   </button>
                 </div>
               </form>
@@ -731,6 +674,5 @@ export default function CustomersPage() {
           </div>
         )}
       </section>
-    </DashboardShell>
   );
 }

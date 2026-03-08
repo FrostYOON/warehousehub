@@ -1,22 +1,42 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
-import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
+import { exportReturns } from '@/features/returns/api/returns.api';
 import { useReturnsPage } from '@/features/returns/hooks/use-returns-page';
+import { useToast } from '@/shared/ui/toast/toast-provider';
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 import type { StorageType } from '@/features/returns/model/types';
 import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
 import { ActionButton, SortableHeader, StatusBadge } from '@/shared/ui/common';
 
 export default function ReturnsPage() {
   const searchParams = useSearchParams();
-  const { me, loggingOut, signOut } = useAuthSession();
+  const { me } = useAuthSession();
+  const { showToast } = useToast();
+
+  const handleExportReturns = useCallback(async () => {
+    try {
+      const blob = await exportReturns();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `returns-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showToast('반품 엑셀 다운로드를 시작했습니다.', 'success');
+    } catch (error) {
+      showToast(getErrorMessage(error, '엑셀 다운로드에 실패했습니다.'), 'error');
+    }
+  }, [showToast]);
+
   const {
     customers,
     items,
     receipts,
-    filteredReceipts,
     sortedFilteredReceipts,
     returnSortKey,
     returnSortDir,
@@ -71,10 +91,11 @@ export default function ReturnsPage() {
   const [itemSearch, setItemSearch] = useState('');
   const [showSelectedOnly, setShowSelectedOnly] = useState(false);
 
-  const customerDisplayName = (customer?: {
-    name?: string;
-    customerName?: string;
-  } | null) => customer?.name ?? customer?.customerName ?? '-';
+  const customerDisplayName = useCallback(
+    (customer?: { name?: string; customerName?: string } | null) =>
+      customer?.name ?? customer?.customerName ?? '-',
+    [],
+  );
 
   const returnDisplayNo = (receipt: { receiptNo?: number; receivedAt: string }) => {
     if (typeof receipt.receiptNo === 'number') {
@@ -178,20 +199,14 @@ export default function ReturnsPage() {
   }, [searchParams, setKeyword, setStatusFilter]);
 
   return (
-    <DashboardShell
-      userName={me?.name ?? '사용자'}
-      companyName={me?.companyName ?? '회사'}
-      onLogout={signOut}
-      loggingOut={loggingOut}
-      menus={buildDashboardMenus(me?.role)}
-    >
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800">반품 접수 목록</h2>
+    <>
+      <section className="page-section">
+        <h2 className="page-title">반품 접수 목록</h2>
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr_auto_auto]">
           <select
             value={newCustomerId}
             onChange={(e) => setNewCustomerId(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="form-select"
           >
             <option value="">고객사(선택)</option>
             {customers.map((customer) => (
@@ -204,11 +219,12 @@ export default function ReturnsPage() {
             value={newMemo}
             onChange={(e) => setNewMemo(e.target.value)}
             placeholder="메모(선택)"
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
+            className="form-input"
           />
           <ActionButton
             onClick={() => setIsItemModalOpen(true)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-100"
+            variant="secondary"
+            size="lg"
           >
             품목 선택 ({selectedItemCount})
           </ActionButton>
@@ -219,11 +235,12 @@ export default function ReturnsPage() {
         <p className="mt-2 text-xs text-slate-500">
           반품 접수도 품목을 모달에서 여러 개 선택해 한 번에 생성할 수 있습니다.
         </p>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr_auto]">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr_auto_auto]">
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-select"
           >
             <option value="">전체 상태</option>
             <option value="RECEIVED">RECEIVED</option>
@@ -238,14 +255,22 @@ export default function ReturnsPage() {
               if (e.key === 'Enter') void refreshList();
             }}
             placeholder="접수번호 또는 고객사명 검색"
-            className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-input"
           />
           <ActionButton
             onClick={() => void refreshList()}
             disabled={loadingList}
-            className="h-10 rounded-lg border border-slate-300 px-4 text-sm hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+            variant="secondary"
+            size="lg"
           >
             {loadingList ? '조회 중...' : '조회'}
+          </ActionButton>
+          <ActionButton
+            onClick={() => void handleExportReturns()}
+            variant="secondary"
+            size="lg"
+          >
+            엑셀 다운로드
           </ActionButton>
         </div>
         {loadingList ? (
@@ -253,9 +278,9 @@ export default function ReturnsPage() {
         ) : displayedReceipts.length === 0 ? (
           <p className="mt-3 text-sm text-slate-600">반품 접수 내역이 없습니다.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="text-slate-500">
+          <div className="table-wrapper mt-4">
+            <table className="data-table min-w-[760px]">
+              <thead>
                 <tr>
                   <SortableHeader
                     label="접수번호"
@@ -263,7 +288,6 @@ export default function ReturnsPage() {
                     currentSortKey={returnSortKey}
                     currentSortDir={returnSortDir}
                     onSort={toggleReturnSort}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="상태"
@@ -271,7 +295,6 @@ export default function ReturnsPage() {
                     currentSortKey={returnSortKey}
                     currentSortDir={returnSortDir}
                     onSort={toggleReturnSort}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="고객사"
@@ -279,7 +302,6 @@ export default function ReturnsPage() {
                     currentSortKey={returnSortKey}
                     currentSortDir={returnSortDir}
                     onSort={toggleReturnSort}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="접수일"
@@ -287,7 +309,6 @@ export default function ReturnsPage() {
                     currentSortKey={returnSortKey}
                     currentSortDir={returnSortDir}
                     onSort={toggleReturnSort}
-                    className="px-2 py-2"
                   />
                   <SortableHeader
                     label="라인 수"
@@ -295,26 +316,25 @@ export default function ReturnsPage() {
                     currentSortKey={returnSortKey}
                     currentSortDir={returnSortDir}
                     onSort={toggleReturnSort}
-                    className="px-2 py-2"
                   />
-                  <th className="px-2 py-2">상세</th>
+                  <th>상세</th>
                 </tr>
               </thead>
               <tbody>
                 {displayedReceipts.map((receipt) => (
-                  <tr key={receipt.id} className="border-t border-slate-100">
-                    <td className="px-2 py-2 font-medium text-slate-700">
+                  <tr key={receipt.id}>
+                    <td className="font-medium text-slate-700">
                       {returnDisplayNo(receipt)}
                     </td>
-                    <td className="px-2 py-2">
+                    <td>
                       <StatusBadge status={receipt.status} />
                     </td>
-                    <td className="px-2 py-2">{customerDisplayName(receipt.customer)}</td>
-                    <td className="px-2 py-2">
+                    <td>{customerDisplayName(receipt.customer)}</td>
+                    <td>
                       {new Date(receipt.receivedAt).toLocaleString()}
                     </td>
-                    <td className="px-2 py-2">{receipt.lines.length}</td>
-                    <td className="px-2 py-2">
+                    <td>{receipt.lines.length}</td>
+                    <td>
                       <button
                         type="button"
                         onClick={() => void loadDetail(receipt.id)}
@@ -329,6 +349,7 @@ export default function ReturnsPage() {
             </table>
           </div>
         )}
+        </div>
       </section>
 
       {isItemModalOpen && (
@@ -404,7 +425,7 @@ export default function ReturnsPage() {
                             setCreateStorageType(item.id, e.target.value as StorageType)
                           }
                           disabled={!createItemChecked[item.id]}
-                          className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                          className="form-select h-8 px-2 text-xs"
                         >
                           <option value="DRY">DRY</option>
                           <option value="COOL">COOL</option>
@@ -419,7 +440,7 @@ export default function ReturnsPage() {
                           value={createItemQty[item.id] ?? '0'}
                           onChange={(e) => setCreateQty(item.id, e.target.value)}
                           disabled={!createItemChecked[item.id]}
-                          className="h-8 w-24 rounded-md border border-slate-300 px-2 text-xs"
+                          className="form-input h-8 w-24 px-2 text-xs"
                           placeholder="수량"
                         />
                       </td>
@@ -429,7 +450,7 @@ export default function ReturnsPage() {
                           value={createItemExpiry[item.id] ?? ''}
                           onChange={(e) => setCreateExpiry(item.id, e.target.value)}
                           disabled={!createItemChecked[item.id]}
-                          className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                          className="form-input h-8 px-2 text-xs"
                         />
                       </td>
                     </tr>
@@ -449,9 +470,9 @@ export default function ReturnsPage() {
         </div>
       )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="page-section">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-slate-800">반품 상세</h3>
+          <h3 className="page-subtitle">반품 상세</h3>
           <div className="flex flex-wrap gap-2">
             <ActionButton
               onClick={() => void cancelReceipt()}
@@ -492,27 +513,27 @@ export default function ReturnsPage() {
               <p>고객사: {customerDisplayName(selected.customer)}</p>
               <p>메모: {selected.memo ?? '-'}</p>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-left text-sm">
-                <thead className="text-slate-500">
+            <div className="table-wrapper">
+              <table className="data-table min-w-[980px]">
+                <thead>
                   <tr>
-                    <th className="px-2 py-2">품목코드</th>
-                    <th className="px-2 py-2">품목명</th>
-                    <th className="px-2 py-2">보관타입</th>
-                    <th className="px-2 py-2">유통기한</th>
-                    <th className="px-2 py-2">수량</th>
-                    <th className="px-2 py-2">판정</th>
-                    <th className="px-2 py-2">처리</th>
-                    <th className="px-2 py-2">라인 작업</th>
+                    <th>품목코드</th>
+                    <th>품목명</th>
+                    <th>보관타입</th>
+                    <th>유통기한</th>
+                    <th>수량</th>
+                    <th>판정</th>
+                    <th>처리</th>
+                    <th>라인 작업</th>
                   </tr>
                 </thead>
                 <tbody>
                   {selected.lines.map((line) => (
-                    <tr key={line.id} className="border-t border-slate-100">
-                      <td className="px-2 py-2">{line.item?.itemCode ?? '-'}</td>
-                      <td className="px-2 py-2">{line.item?.itemName ?? '-'}</td>
-                      <td className="px-2 py-2">{line.storageType}</td>
-                      <td className="px-2 py-2">
+                    <tr key={line.id}>
+                      <td>{line.item?.itemCode ?? '-'}</td>
+                      <td>{line.item?.itemName ?? '-'}</td>
+                      <td>{line.storageType}</td>
+                      <td className="min-w-0">
                         {canEditSelectedReceipt ? (
                           <div className="flex items-center gap-2">
                             <input
@@ -524,12 +545,13 @@ export default function ReturnsPage() {
                                   [line.id]: e.target.value,
                                 }))
                               }
-                              className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                              className="form-input h-8 px-2 text-xs"
                             />
                             <ActionButton
                               onClick={() => void updateLineExpiry(line.id)}
                               disabled={actionLoading !== null}
-                              className="h-8 rounded-md border border-slate-300 px-2 text-xs hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              size="sm"
+                              variant="secondary"
                             >
                               수정
                             </ActionButton>
@@ -551,7 +573,7 @@ export default function ReturnsPage() {
                                 [line.id]: e.target.value as 'RESTOCK' | 'DISCARD',
                               }))
                             }
-                            className="h-8 rounded-md border border-slate-300 px-2 text-xs"
+                            className="form-input h-8 px-2 text-xs"
                           >
                             <option value="RESTOCK">RESTOCK</option>
                             <option value="DISCARD">DISCARD</option>
@@ -585,7 +607,7 @@ export default function ReturnsPage() {
                               setLineQtyMap((prev) => ({ ...prev, [line.id]: e.target.value }))
                             }
                             disabled={!canEditSelectedReceipt}
-                            className="h-8 w-24 rounded-md border border-slate-300 px-2 text-xs"
+                            className="form-input h-8 w-24 px-2 text-xs"
                           />
                           <ActionButton
                             onClick={() => void updateLineQty(line.id)}
@@ -611,6 +633,6 @@ export default function ReturnsPage() {
           </div>
         )}
       </section>
-    </DashboardShell>
+    </>
   );
 }

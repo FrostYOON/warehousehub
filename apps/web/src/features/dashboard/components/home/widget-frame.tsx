@@ -2,6 +2,8 @@ type WidgetFrameProps = {
   title: string;
   subtitle?: string;
   meta?: React.ReactNode;
+  /** 위젯 헤더에 표시할 추가 액션 버튼 등 */
+  headerActions?: React.ReactNode;
   collapsed: boolean;
   onToggle: () => void;
   onMoveUp: () => void;
@@ -15,6 +17,7 @@ export function WidgetFrame({
   title,
   subtitle,
   meta,
+  headerActions,
   collapsed,
   onToggle,
   onMoveUp,
@@ -24,20 +27,22 @@ export function WidgetFrame({
   children,
 }: WidgetFrameProps) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+          <h2 className="text-base font-semibold text-slate-800">{title}</h2>
           {subtitle ? <p className="mt-1 text-xs text-slate-500">{subtitle}</p> : null}
           {meta ? <div className="mt-1">{meta}</div> : null}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {headerActions}
+          <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={onMoveUp}
             disabled={!canMoveUp}
             aria-label="위로 이동"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40"
             title="위로 이동"
           >
             <svg
@@ -54,7 +59,7 @@ export function WidgetFrame({
             onClick={onMoveDown}
             disabled={!canMoveDown}
             aria-label="아래로 이동"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40"
             title="아래로 이동"
           >
             <svg
@@ -70,7 +75,7 @@ export function WidgetFrame({
             type="button"
             onClick={onToggle}
             aria-label={collapsed ? '펼치기' : '접기'}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-xs text-slate-700 hover:bg-slate-100"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-1"
             title={collapsed ? '펼치기' : '접기'}
           >
             {collapsed ? (
@@ -93,6 +98,7 @@ export function WidgetFrame({
               </svg>
             )}
           </button>
+          </div>
         </div>
       </div>
       {!collapsed ? <div className="mt-3">{children}</div> : null}

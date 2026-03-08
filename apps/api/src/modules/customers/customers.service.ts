@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -49,25 +50,25 @@ export class CustomersService {
   async create(companyId: string, dto: CreateCustomerDto) {
     try {
       return await this.prisma.customer.create({
-      data: {
-        companyId,
-        customerCode: this.normalizeOptionalStringForCreate(dto.customerCode),
-        customerName: this.normalizeRequiredString(
-          dto.customerName,
-          'customerName',
-        ),
-        customerAddress: this.normalizeRequiredString(
-          dto.customerAddress,
-          'customerAddress',
-        ),
-        postalCode: this.normalizeOptionalStringForCreate(dto.postalCode),
-        city: this.normalizeOptionalStringForCreate(dto.city),
-        state: this.normalizeOptionalStringForCreate(dto.state),
-        country: this.normalizeOptionalStringForCreate(dto.country),
-        lat: dto.lat ?? null,
-        lng: dto.lng ?? null,
-      },
-    });
+        data: {
+          companyId,
+          customerCode: this.normalizeOptionalStringForCreate(dto.customerCode),
+          customerName: this.normalizeRequiredString(
+            dto.customerName,
+            'customerName',
+          ),
+          customerAddress: this.normalizeRequiredString(
+            dto.customerAddress,
+            'customerAddress',
+          ),
+          postalCode: this.normalizeOptionalStringForCreate(dto.postalCode),
+          city: this.normalizeOptionalStringForCreate(dto.city),
+          state: this.normalizeOptionalStringForCreate(dto.state),
+          country: this.normalizeOptionalStringForCreate(dto.country),
+          lat: dto.lat ?? null,
+          lng: dto.lng ?? null,
+        },
+      });
     } catch (error) {
       if (
         error instanceof PrismaClientKnownRequestError &&
@@ -81,11 +82,18 @@ export class CustomersService {
     }
   }
 
-  list(
+  async list(
     companyId: string,
-    opts?: { q?: string; includeInactive?: boolean; isActive?: boolean },
+    opts?: {
+      q?: string;
+      includeInactive?: boolean;
+      isActive?: boolean;
+      page?: number;
+      pageSize?: number;
+    },
   ) {
-    const { q, includeInactive, isActive } = opts ?? {};
+    const { q, includeInactive, isActive, page = 1, pageSize = 500 } =
+      opts ?? {};
     const isActiveFilter =
       includeInactive === true
         ? undefined
@@ -93,26 +101,43 @@ export class CustomersService {
           ? { isActive }
           : { isActive: true };
 
-    return this.prisma.customer.findMany({
-      where: {
-        companyId,
-        ...isActiveFilter,
-        ...(q
-          ? {
-              OR: [
-                { customerCode: { contains: q, mode: 'insensitive' } },
-                { customerName: { contains: q, mode: 'insensitive' } },
-                { customerAddress: { contains: q, mode: 'insensitive' } },
-                { city: { contains: q, mode: 'insensitive' } },
-                { state: { contains: q, mode: 'insensitive' } },
-                { postalCode: { contains: q, mode: 'insensitive' } },
-                { country: { contains: q, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { customerName: 'asc' },
+    const where = {
+      companyId,
+      ...isActiveFilter,
+      ...(q
+        ? {
+            OR: [
+              { customerCode: { contains: q, mode: Prisma.QueryMode.insensitive } },
+              { customerName: { contains: q, mode: Prisma.QueryMode.insensitive } },
+              { customerAddress: { contains: q, mode: Prisma.QueryMode.insensitive } },
+              { city: { contains: q, mode: Prisma.QueryMode.insensitive } },
+              { state: { contains: q, mode: Prisma.QueryMode.insensitive } },
+              { postalCode: { contains: q, mode: Prisma.QueryMode.insensitive } },
+              { country: { contains: q, mode: Prisma.QueryMode.insensitive } },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.customer.count({ where }),
+      this.prisma.customer.findMany({
+        where,
+        orderBy: { customerName: 'asc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return { total, page, pageSize, items };
+  }
+
+  async findById(companyId: string, id: string) {
+    const customer = await this.prisma.customer.findFirst({
+      where: { id, companyId },
     });
+    if (!customer) throw new NotFoundException('Customer not found');
+    return customer;
   }
 
   async update(companyId: string, id: string, dto: UpdateCustomerDto) {
@@ -143,10 +168,10 @@ export class CustomersService {
         },
       });
       logger.info({
-      event: 'customers.update.success',
-      companyId,
-      customerId: id,
-    });
+        event: 'customers.update.success',
+        companyId,
+        customerId: id,
+      });
       return updated;
     } catch (error) {
       if (

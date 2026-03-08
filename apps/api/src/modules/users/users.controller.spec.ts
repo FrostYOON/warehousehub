@@ -162,7 +162,9 @@ describe('UsersController', () => {
 
   describe('remove (DELETE /users/:id)', () => {
     it('removes unapproved user', async () => {
-      usersServiceMock.removeUnapprovedUser.mockResolvedValue({ deleted: true });
+      usersServiceMock.removeUnapprovedUser.mockResolvedValue({
+        deleted: true,
+      });
 
       const result = await controller.remove(req, 'user-1');
 

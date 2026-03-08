@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
 import {
   cancelReturn,
   createReturn,
@@ -21,15 +20,7 @@ import type { UserRole } from '@/features/auth/model/types';
 import { getStocks } from '@/features/stocks/api/stocks.api';
 import type { StockRow } from '@/features/stocks/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
-
-function errorMessageFromUnknown(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const payload = error.response?.data as { message?: string | string[] };
-    if (Array.isArray(payload?.message)) return payload.message[0] ?? '반품 요청에 실패했습니다.';
-    return payload?.message ?? '반품 요청에 실패했습니다.';
-  }
-  return '반품 요청에 실패했습니다.';
-}
+import { getErrorMessage } from '@/shared/utils/get-error-message';
 
 export function useReturnsPage(role?: UserRole) {
   const { showToast } = useToast();
@@ -68,7 +59,7 @@ export function useReturnsPage(role?: UserRole) {
       const data = await getReturns();
       setReceipts(data);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
     } finally {
       setLoadingList(false);
     }
@@ -88,7 +79,7 @@ export function useReturnsPage(role?: UserRole) {
       });
       setItems(Array.from(uniqueItems.values()));
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
     }
   }, [showToast]);
 
@@ -118,7 +109,7 @@ export function useReturnsPage(role?: UserRole) {
           ),
         );
       } catch (error) {
-        showToast(errorMessageFromUnknown(error), 'error');
+        showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
       } finally {
         setLoadingDetail(false);
       }
@@ -247,7 +238,7 @@ export function useReturnsPage(role?: UserRole) {
       setCreateItemQty({});
       setCreateItemExpiry({});
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
     } finally {
       setCreating(false);
     }
@@ -311,7 +302,7 @@ export function useReturnsPage(role?: UserRole) {
       await refreshList();
       await loadDetail(selected.id);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }
@@ -335,7 +326,7 @@ export function useReturnsPage(role?: UserRole) {
       await refreshList();
       await loadDetail(selected.id);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }
@@ -352,7 +343,7 @@ export function useReturnsPage(role?: UserRole) {
       await refreshList();
       await loadDetail(selected.id);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }
@@ -367,7 +358,7 @@ export function useReturnsPage(role?: UserRole) {
       await refreshList();
       await loadDetail(selected.id);
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }
@@ -386,7 +377,7 @@ export function useReturnsPage(role?: UserRole) {
       await loadDetail(selected.id);
       showToast('반품 판정을 완료했습니다.', 'success');
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }
@@ -405,7 +396,7 @@ export function useReturnsPage(role?: UserRole) {
       await loadDetail(selected.id);
       showToast('반품 재고 반영을 완료했습니다.', 'success');
     } catch (error) {
-      showToast(errorMessageFromUnknown(error), 'error');
+      showToast(getErrorMessage(error, '반품 요청에 실패했습니다.'), 'error');
     } finally {
       setActionLoading(null);
     }
