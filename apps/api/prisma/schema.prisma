@@ -322,7 +322,9 @@ model Item {
 
   itemCode String
   itemName String
-  isActive Boolean @default(true)
+  /// 품목 기본 원가 (참조/기본값용, 입고 시 미입력 시 사용)
+  unitCost Decimal? @db.Decimal(18, 4)
+  isActive Boolean   @default(true)
 
   lots Lot[]
 
@@ -480,7 +482,9 @@ model InventoryTxLine {
   lotId String
   lot   Lot    @relation(fields: [lotId], references: [id], onDelete: Cascade)
 
-  qtyDelta Decimal @db.Decimal(18, 3)
+  qtyDelta Decimal  @db.Decimal(18, 3)
+  /// 입고 확정 시 기록된 단위 원가 (원가 리포트/감사용)
+  unitCost Decimal? @db.Decimal(18, 4)
 
   createdAt DateTime @default(now())
 
@@ -516,8 +520,10 @@ model InboundUploadRow {
   itemCode    String
   itemName    String
   storageType StorageType
-  quantity    Decimal @db.Decimal(18, 3)
+  quantity    Decimal  @db.Decimal(18, 3)
   expiryDate  DateTime?
+  /// 입고 행 단위 원가 (엑셀 UnitCost 컬럼 또는 UI 입력)
+  unitCost    Decimal? @db.Decimal(18, 4)
 
   isValid      Boolean @default(true)
   errorMessage String?

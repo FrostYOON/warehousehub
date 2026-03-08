@@ -1,6 +1,7 @@
 import {
   canAccessAsn,
   canAccessBranches,
+  canAccessCost,
   canAccessCustomers,
   canAccessDashboard,
   canAccessInbound,
@@ -80,6 +81,14 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
       label: '고객사',
       description: '고객사 관리',
       href: '/customers',
+    });
+  }
+
+  if (canAccessCost(role)) {
+    menus.push({
+      label: '비용/원가',
+      description: '원가 관리·리포트',
+      href: '/cost',
     });
   }
 

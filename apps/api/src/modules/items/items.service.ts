@@ -48,6 +48,10 @@ export class ItemsService {
           companyId,
           itemCode: this.normalizeRequiredString(dto.itemCode, 'itemCode'),
           itemName: this.normalizeRequiredString(dto.itemName, 'itemName'),
+          unitCost:
+            dto.unitCost != null && Number.isFinite(dto.unitCost)
+              ? dto.unitCost
+              : undefined,
         },
       });
     } catch (error) {
@@ -134,6 +138,12 @@ export class ItemsService {
             dto.itemName,
             'itemName',
           ),
+          unitCost:
+            dto.unitCost !== undefined
+              ? Number.isFinite(dto.unitCost)
+                ? dto.unitCost
+                : null
+              : undefined,
         },
       });
       logger.info({

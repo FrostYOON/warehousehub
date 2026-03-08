@@ -20,6 +20,7 @@ import { getErrorMessage } from '@/shared/utils/get-error-message';
 const INIT_FORM: CreateItemPayload = {
   itemCode: '',
   itemName: '',
+  unitCost: undefined,
 };
 
 export default function ItemsPage() {
@@ -119,6 +120,7 @@ export default function ItemsPage() {
     setEditForm({
       itemCode: item.itemCode,
       itemName: item.itemName,
+      unitCost: item.unitCost ?? undefined,
     });
   }
 
@@ -135,6 +137,10 @@ export default function ItemsPage() {
       await createItem({
         itemCode: addForm.itemCode.trim(),
         itemName: addForm.itemName.trim(),
+        unitCost:
+          addForm.unitCost != null && Number.isFinite(addForm.unitCost)
+            ? addForm.unitCost
+            : undefined,
       });
       setAddForm(INIT_FORM);
       setIsAddModalOpen(false);
@@ -161,6 +167,12 @@ export default function ItemsPage() {
       await updateItem(editItem.id, {
         itemCode: editForm.itemCode.trim(),
         itemName: editForm.itemName.trim(),
+        unitCost:
+          editForm.unitCost !== undefined
+            ? Number.isFinite(editForm.unitCost)
+              ? editForm.unitCost
+              : undefined
+            : undefined,
       });
       setEditItem(null);
       setRefreshKey((k) => k + 1);
@@ -239,6 +251,7 @@ export default function ItemsPage() {
                 <tr>
                   <th>품목 코드</th>
                   <th>품목명</th>
+                  <th>기본 원가</th>
                   <th>상태</th>
                   <th>작업</th>
                 </tr>
@@ -251,6 +264,11 @@ export default function ItemsPage() {
                     </td>
                     <td className="font-medium text-slate-800">
                       {item.itemName}
+                    </td>
+                    <td className="text-right tabular-nums text-slate-600">
+                      {item.unitCost != null
+                        ? Number(item.unitCost).toLocaleString()
+                        : '-'}
                     </td>
                     <td>
                       <span
@@ -356,6 +374,31 @@ export default function ItemsPage() {
                     placeholder="예: 상품 A"
                   />
                 </div>
+                <div>
+                  <label
+                    htmlFor="add-unit-cost"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    기본 원가 (선택)
+                  </label>
+                  <input
+                    id="add-unit-cost"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={addForm.unitCost ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setAddForm((f) => ({
+                        ...f,
+                        unitCost: v === '' ? undefined : Number(v),
+                      }));
+                    }}
+                    disabled={addSubmitting}
+                    className="form-input mt-1"
+                    placeholder="예: 1000"
+                  />
+                </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
@@ -426,6 +469,31 @@ export default function ItemsPage() {
                     }
                     disabled={editSubmitting}
                     className="form-input mt-1"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="edit-unit-cost"
+                    className="block text-sm font-medium text-slate-700"
+                  >
+                    기본 원가 (선택)
+                  </label>
+                  <input
+                    id="edit-unit-cost"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editForm.unitCost ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditForm((f) => ({
+                        ...f,
+                        unitCost: v === '' ? undefined : Number(v),
+                      }));
+                    }}
+                    disabled={editSubmitting}
+                    className="form-input mt-1"
+                    placeholder="예: 1000"
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">

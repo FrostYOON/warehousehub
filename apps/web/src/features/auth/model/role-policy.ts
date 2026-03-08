@@ -77,6 +77,18 @@ export function canAccessAsn(role?: UserRole): boolean {
   return INBOUND_ALLOWED_ROLES.has(role);
 }
 
+/** 비용/원가 관리: ADMIN, WH_MANAGER, ACCOUNTING */
+const COST_ALLOWED_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'WH_MANAGER',
+  'ACCOUNTING',
+]);
+
+export function canAccessCost(role?: UserRole): boolean {
+  if (!role) return false;
+  return COST_ALLOWED_ROLES.has(role);
+}
+
 /** 대시보드: ADMIN, WH_MANAGER, SALES, ACCOUNTING (DELIVERY 제외) */
 export function canAccessDashboard(role?: UserRole): boolean {
   if (!role) return false;

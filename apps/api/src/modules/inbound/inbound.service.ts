@@ -15,6 +15,7 @@ type ParsedRow = {
   storageType: StorageType;
   quantity: number;
   expiryDate: Date | null;
+  unitCost: number | null;
   isValid: boolean;
   errorMessage: string | null;
 };
@@ -141,6 +142,15 @@ export class InboundService {
     return n;
   }
 
+  private parseUnitCost(raw: unknown): number | null {
+    if (raw === null || raw === undefined) return null;
+    const s = toCellString(raw).trim();
+    if (!s || s === '-' || s.toUpperCase() === 'N/A') return null;
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return n;
+  }
+
   private ensureRequiredColumns(headers: string[]) {
     const normalizedHeaders = headers.map(normalizeHeaderName);
     for (const col of REQUIRED_COLUMNS) {
@@ -186,6 +196,7 @@ export class InboundService {
         const storageType = this.parseStorageType(r['StorageType']);
         const quantity = this.parseQuantity(r['Quantity']);
         const expiryDate = this.parseExpiryDate(r['ExpiryDate']);
+        const unitCost = this.parseUnitCost(r['UnitCost']);
 
         if (!itemCode) throw new Error('ItemCode is empty');
         if (!itemName) throw new Error('ItemName is empty');
@@ -196,6 +207,7 @@ export class InboundService {
           storageType,
           quantity,
           expiryDate,
+          unitCost,
           isValid,
           errorMessage,
         };
@@ -208,6 +220,7 @@ export class InboundService {
           storageType: StorageType.DRY, // 임시값(유효하지 않으면 무시됨)
           quantity: 0,
           expiryDate: null,
+          unitCost: null,
           isValid,
           errorMessage,
         };
@@ -236,6 +249,7 @@ export class InboundService {
             storageType: r.storageType,
             quantity: r.quantity,
             expiryDate: r.expiryDate,
+            unitCost: r.unitCost,
             isValid: r.isValid,
             errorMessage: r.errorMessage,
           })),
@@ -438,7 +452,7 @@ export class InboundService {
             itemCode: row.itemCode,
             itemName: row.itemName,
           },
-          select: { id: true },
+          select: { id: true, unitCost: true },
         });
 
         // 2️⃣ Lot get or create (null 처리 포함)
@@ -521,13 +535,20 @@ export class InboundService {
           },
         });
 
-        // 5️⃣ InventoryTxLine 생성
+        // 5️⃣ InventoryTxLine 생성 (입고 시 원가 기록: 행 원가 ?? 품목 기본 원가)
+        const unitCost =
+          row.unitCost != null
+            ? row.unitCost
+            : item.unitCost != null
+              ? asNumber(item.unitCost)
+              : null;
         await tx.inventoryTxLine.create({
           data: {
             txId: inventoryTx.id,
             warehouseId: warehouse.id,
             lotId: lot.id,
             qtyDelta: row.quantity,
+            unitCost,
           },
         });
       }

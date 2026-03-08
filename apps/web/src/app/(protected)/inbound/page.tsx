@@ -101,6 +101,8 @@ export default function InboundPage() {
             <span>{uploading ? '업로드 중...' : '지원 형식: .xlsx, .xls'}</span>
             <span className="hidden sm:inline">/</span>
             <span>ExpiryDate가 없으면 `-`, 빈값, `N/A` 입력 가능</span>
+            <span className="hidden sm:inline">/</span>
+            <span>UnitCost 컬럼(선택) 포함 시 입고 원가 기록</span>
           </div>
         </div>
       </section>
@@ -307,6 +309,7 @@ export default function InboundPage() {
                   <th>StorageType</th>
                   <th>Quantity</th>
                   <th>ExpiryDate</th>
+                  <th>UnitCost</th>
                   <th>유효성</th>
                   <th>메시지</th>
                 </tr>
@@ -324,6 +327,11 @@ export default function InboundPage() {
                     <td>
                       {row.expiryDate
                         ? new Date(row.expiryDate).toLocaleDateString()
+                        : '-'}
+                    </td>
+                    <td className="text-right tabular-nums">
+                      {row.unitCost != null
+                        ? Number(row.unitCost).toLocaleString()
                         : '-'}
                     </td>
                     <td>
