@@ -7,6 +7,8 @@ import {
   canAccessMembers,
   canAccessTemperatureMonitor,
   canAccessTransfers,
+  canEditStock,
+  canViewStock,
 } from '@/features/auth/model/role-policy';
 import { LOGIN_PATH } from '@/features/auth/model/constants';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
@@ -21,6 +23,8 @@ const ITEMS_PATH = '/items';
 const TEMPERATURE_MONITOR_PATH = '/temperature-monitor';
 const STOCKTAKING_PATH = '/stocktaking';
 const TRANSFERS_PATH = '/transfers';
+const STOCKS_PATH = '/stocks';
+const STOCKS_MANAGE_PATH = '/stocks/manage';
 
 function getDefaultRedirectPath(role?: string): string {
   if (canAccessDashboard(role as Parameters<typeof canAccessDashboard>[0])) {
@@ -74,6 +78,16 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
     }
 
     if (pathname === STOCKTAKING_PATH && !canAccessInbound(role)) {
+      router.replace('/stocks');
+      return;
+    }
+
+    if (pathname === STOCKS_PATH && !canViewStock(role)) {
+      router.replace(getDefaultRedirectPath(role));
+      return;
+    }
+
+    if (pathname === STOCKS_MANAGE_PATH && !canEditStock(role)) {
       router.replace('/stocks');
       return;
     }
