@@ -23,6 +23,7 @@ import { LoggingModule } from './common/logging/logging.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { TemperatureMonitorModule } from './modules/temperature-monitor/temperature-monitor.module';
 import { TransfersModule } from './modules/transfers/transfers.module';
+import { AsnModule } from './modules/asn/asn.module';
 import { TraceabilityModule } from './modules/traceability/traceability.module';
 import { StocktakingModule } from './modules/stocktaking/stocktaking.module';
 
@@ -53,6 +54,7 @@ import { StocktakingModule } from './modules/stocktaking/stocktaking.module';
     DashboardModule,
     TemperatureMonitorModule,
     TransfersModule,
+    AsnModule,
     TraceabilityModule,
     StocktakingModule,
   ],

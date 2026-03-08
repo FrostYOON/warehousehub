@@ -101,6 +101,14 @@ enum StocktakingStatus {
   CANCELLED // 취소
 }
 
+/// 입고 예정(ASN) 상태
+enum AsnStatus {
+  PENDING // 입고 신청됨
+  SHIPPED // 원본 지사 출고 완료
+  RECEIVED // 대상 지사 입고 확정
+  CANCELLED // 취소
+}
+
 /// 하나의 회사(테넌트)
 /// 모든 데이터는 companyId 기준으로 격리됨
 model Company {
@@ -136,6 +144,7 @@ model Company {
   temperatureLogs TemperatureLog[]
   transfers       Transfer[]
   stocktakings    Stocktaking[]
+  asns            Asn[]
 }
 
 /// 온도·날씨 모니터링 로그
@@ -221,6 +230,7 @@ model User {
   returnLineDecisions           ReturnReceiptLine[] @relation("ReturnLineDecidedBy")
   returnLineProcesses           ReturnReceiptLine[] @relation("ReturnLineProcessedBy")
   temperatureLogs              TemperatureLog[]
+  createdAsns                  Asn[]                @relation("AsnCreatedBy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -261,6 +271,8 @@ model Branch {
   code String? // TOR, MTL 등
 
   warehouses Warehouse[]
+  asnsFrom   Asn[]    @relation("AsnFromBranch")
+  asnsTo     Asn[]    @relation("AsnToBranch")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -293,6 +305,8 @@ model Warehouse {
   transfersFrom Transfer[] @relation("TransferFromWarehouse")
   transfersTo   Transfer[] @relation("TransferToWarehouse")
   stocktakings Stocktaking[]
+  asnsFrom     Asn[]       @relation("AsnFromWarehouse")
+  asnsTo       Asn[]       @relation("AsnToWarehouse")
 
   @@unique([branchId, type, region])
   @@index([companyId])
@@ -316,6 +330,7 @@ model Item {
   updatedAt          DateTime            @updatedAt
   outboundLines      OutboundLine[]
   returnReceiptLines ReturnReceiptLine[]
+  asnLines           AsnLine[]
 
   @@unique([companyId, itemCode])
   @@index([companyId])
@@ -762,6 +777,60 @@ model TransferLine {
 
   @@index([transferId])
   @@index([lotId])
+}
+
+/// 입고 예정(ASN). 지사 간 이동 시 입고 신청 → 출고 → 입고 흐름
+model Asn {
+  id        String    @id @default(uuid())
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  fromBranchId    String?
+  fromBranch      Branch?    @relation("AsnFromBranch", fields: [fromBranchId], references: [id], onDelete: SetNull)
+  fromWarehouseId String?
+  fromWarehouse   Warehouse? @relation("AsnFromWarehouse", fields: [fromWarehouseId], references: [id], onDelete: SetNull)
+
+  toBranchId    String
+  toBranch      Branch    @relation("AsnToBranch", fields: [toBranchId], references: [id], onDelete: Restrict)
+  toWarehouseId String
+  toWarehouse   Warehouse @relation("AsnToWarehouse", fields: [toWarehouseId], references: [id], onDelete: Restrict)
+
+  expectedDate DateTime
+  status      AsnStatus @default(PENDING)
+
+  createdByUserId String?
+  createdByUser   User?   @relation("AsnCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  receivedAt DateTime?
+
+  lines AsnLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([companyId, status])
+  @@index([toBranchId])
+  @@index([toWarehouseId])
+  @@index([expectedDate])
+}
+
+/// 입고 예정 라인 (품목 단위)
+model AsnLine {
+  id     String @id @default(uuid())
+  asnId  String
+  asn    Asn    @relation(fields: [asnId], references: [id], onDelete: Cascade)
+
+  itemId String
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  quantity  Decimal   @db.Decimal(18, 3)
+  expiryDate DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([asnId])
+  @@index([itemId])
 }
 
 /// 재고 실사 계획

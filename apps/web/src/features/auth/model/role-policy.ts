@@ -71,6 +71,12 @@ export function canAccessTransfers(role?: UserRole): boolean {
   return TRANSFERS_ROLES.has(role);
 }
 
+/** 입고 예정(ASN): ADMIN, WH_MANAGER */
+export function canAccessAsn(role?: UserRole): boolean {
+  if (!role) return false;
+  return INBOUND_ALLOWED_ROLES.has(role);
+}
+
 /** 대시보드: ADMIN, WH_MANAGER, SALES, ACCOUNTING (DELIVERY 제외) */
 export function canAccessDashboard(role?: UserRole): boolean {
   if (!role) return false;
