@@ -24,6 +24,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { UpdateUserDepartmentDto } from './dto/update-user-department.dto';
 import { BulkDeactivateDto } from './dto/bulk-deactivate.dto';
 import { BulkRoleDto } from './dto/bulk-role.dto';
 import { hashPassword } from '../../common/utils/password.util';
@@ -76,6 +77,9 @@ export class UsersController {
       name: dto.name,
       passwordHash,
       role: dto.role,
+      departmentCode: dto.departmentCode ?? null,
+      supervisorId: dto.supervisorId ?? null,
+      branchIds: dto.branchIds,
     });
   }
 
@@ -89,6 +93,30 @@ export class UsersController {
   bulkRole(@Req() req: Request, @Body() dto: BulkRoleDto) {
     const { companyId, userId } = req.user!;
     return this.users.bulkRole(companyId, dto.userIds, dto.role, userId);
+  }
+
+  @Patch(':id/department')
+  @ApiOkResponse({
+    schema: {
+      example: {
+        id: 'uuid',
+        departmentCode: 'SALES',
+        supervisorId: 'uuid',
+        branchIds: ['uuid1'],
+      },
+    },
+  })
+  updateDepartment(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDepartmentDto,
+  ) {
+    const { companyId } = req.user!;
+    return this.users.updateDepartment(companyId, id, {
+      departmentCode: dto.departmentCode,
+      supervisorId: dto.supervisorId,
+      branchIds: dto.branchIds,
+    });
   }
 
   @Patch(':id/role')

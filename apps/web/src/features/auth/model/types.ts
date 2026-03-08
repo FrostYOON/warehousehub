@@ -38,6 +38,8 @@ export type MeResponse = {
   role: UserRole;
   companyId: string;
   companyName: string | null;
+  /** 담당 지사 ID 배열. null = 전체 지사 접근 */
+  branchIds?: string[] | null;
   dateOfBirth?: string | null;
   phone?: string | null;
   addressLine1?: string | null;
@@ -83,6 +85,12 @@ export type LogoutOthersResponse = {
   revokedCount: number;
 };
 
+export type CompanyUserBranch = {
+  id: string;
+  name: string;
+  code: string | null;
+};
+
 export type CompanyUser = {
   id: string;
   email: string;
@@ -90,6 +98,11 @@ export type CompanyUser = {
   role: UserRole;
   isActive: boolean;
   lastLoginAt?: string | null;
+  departmentCode?: string | null;
+  supervisorId?: string | null;
+  supervisor?: { id: string; name: string; email: string } | null;
+  branchIds?: string[];
+  branches?: CompanyUserBranch[];
   createdAt: string;
   updatedAt: string;
 };

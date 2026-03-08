@@ -158,13 +158,32 @@ export class UsersService {
           role: true,
           isActive: true,
           lastLoginAt: true,
+          departmentCode: true,
+          supervisorId: true,
+          supervisor: {
+            select: { id: true, name: true, email: true },
+          },
+          branchUsers: {
+            select: {
+              branch: { select: { id: true, name: true, code: true } },
+            },
+          },
           createdAt: true,
           updatedAt: true,
         },
       }),
     ]);
 
-    return { total, page, limit, items };
+    return {
+      total,
+      page,
+      limit,
+      items: items.map((u) => ({
+        ...u,
+        branchIds: u.branchUsers.map((bu) => bu.branch.id),
+        branches: u.branchUsers.map((bu) => bu.branch),
+      })),
+    };
   }
 
   async createUser(params: {
@@ -174,8 +193,33 @@ export class UsersService {
     passwordHash: string;
     role: Role;
     isActive?: boolean;
+    departmentCode?: string | null;
+    supervisorId?: string | null;
+    branchIds?: string[];
   }) {
     try {
+      if (params.supervisorId) {
+        const sup = await this.prisma.user.findFirst({
+          where: {
+            id: params.supervisorId,
+            companyId: params.companyId,
+          },
+        });
+        if (!sup) throw new BadRequestException('상위 관리자를 찾을 수 없습니다.');
+      }
+      if (params.branchIds?.length) {
+        const branches = await this.prisma.branch.findMany({
+          where: {
+            id: { in: params.branchIds },
+            companyId: params.companyId,
+          },
+          select: { id: true },
+        });
+        if (branches.length !== params.branchIds.length) {
+          throw new BadRequestException('일부 담당 지사를 찾을 수 없습니다.');
+        }
+      }
+
       const created = await this.prisma.user.create({
         data: {
           companyId: params.companyId,
@@ -184,6 +228,15 @@ export class UsersService {
           passwordHash: params.passwordHash,
           role: params.role,
           isActive: params.isActive ?? true,
+          departmentCode: params.departmentCode ?? null,
+          supervisorId: params.supervisorId ?? null,
+          branchUsers:
+            params.branchIds?.length &&
+            params.branchIds.length > 0
+              ? {
+                  create: params.branchIds.map((branchId) => ({ branchId })),
+                }
+              : undefined,
         },
         select: {
           id: true,
@@ -191,17 +244,31 @@ export class UsersService {
           name: true,
           role: true,
           isActive: true,
+          departmentCode: true,
+          supervisorId: true,
+          supervisor: {
+            select: { id: true, name: true, email: true },
+          },
+          branchUsers: {
+            select: {
+              branch: { select: { id: true, name: true, code: true } },
+            },
+          },
           createdAt: true,
           updatedAt: true,
         },
       });
-      logger.info({
-        event: 'users.create.success',
-        companyId: params.companyId,
-        userId: created.id,
-        role: created.role,
-      });
-      return created;
+    logger.info({
+      event: 'users.create.success',
+      companyId: params.companyId,
+      userId: created.id,
+      role: created.role,
+    });
+    return {
+      ...created,
+      branchIds: created.branchUsers.map((bu) => bu.branch.id),
+      branches: created.branchUsers.map((bu) => bu.branch),
+    };
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
@@ -210,6 +277,103 @@ export class UsersService {
       }
       throw error;
     }
+  }
+
+  async updateDepartment(
+    companyId: string,
+    userId: string,
+    params: {
+      departmentCode?: string | null;
+      supervisorId?: string | null;
+      branchIds?: string[];
+    },
+  ) {
+    const target = await this.prisma.user.findUnique({
+      where: { id: userId, companyId },
+      select: { id: true, supervisorId: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+
+    if (params.supervisorId !== undefined) {
+      if (params.supervisorId) {
+        const sup = await this.prisma.user.findFirst({
+          where: {
+            id: params.supervisorId,
+            companyId,
+          },
+        });
+        if (!sup) throw new BadRequestException('상위 관리자를 찾을 수 없습니다.');
+        if (params.supervisorId === userId) {
+          throw new BadRequestException('본인을 관리자로 지정할 수 없습니다.');
+        }
+      }
+    }
+
+    if (params.branchIds !== undefined && params.branchIds.length > 0) {
+      const branches = await this.prisma.branch.findMany({
+        where: { id: { in: params.branchIds }, companyId },
+        select: { id: true },
+      });
+      if (branches.length !== params.branchIds.length) {
+        throw new BadRequestException('일부 담당 지사를 찾을 수 없습니다.');
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId, companyId },
+        data: {
+          ...(params.departmentCode !== undefined && {
+            departmentCode: params.departmentCode ?? null,
+          }),
+          ...(params.supervisorId !== undefined && {
+            supervisorId: params.supervisorId ?? null,
+          }),
+        },
+      });
+
+      if (params.branchIds !== undefined) {
+        await tx.branchUser.deleteMany({ where: { userId } });
+        if (params.branchIds.length > 0) {
+          await tx.branchUser.createMany({
+            data: params.branchIds.map((branchId) => ({ userId, branchId })),
+          });
+        }
+      }
+    });
+
+    const updated = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        departmentCode: true,
+        supervisorId: true,
+        supervisor: {
+          select: { id: true, name: true, email: true },
+        },
+        branchUsers: {
+          select: {
+            branch: { select: { id: true, name: true, code: true } },
+          },
+        },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    logger.info({
+      event: 'users.department_updated',
+      companyId,
+      userId,
+    });
+    return {
+      ...updated,
+      branchIds: updated!.branchUsers.map((bu) => bu.branch.id),
+      branches: updated!.branchUsers.map((bu) => bu.branch),
+    };
   }
 
   async updateRole(
