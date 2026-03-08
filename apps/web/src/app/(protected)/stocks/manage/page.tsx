@@ -6,15 +6,11 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuthSession } from '@/features/auth';
 import { canAccessInbound } from '@/features/auth/model/role-policy';
 import { useStocksPageWithOptions } from '@/features/stocks/hooks/use-stocks-page';
-import type { ExpirySoonDays, ItemAnalyticsRange, StockRow, StorageType } from '@/features/stocks/model/types';
+import type { StockRow, StorageType } from '@/features/stocks/model/types';
 import { LotHistoryModal } from '@/features/traceability/components/lot-history-modal';
 import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
 import { ActionButton, SortableHeader } from '@/shared/ui/common';
-
-function formatRate(rate: number): string {
-  const r = Math.round(rate * 10) / 10;
-  return Number.isInteger(r) ? String(r) : r.toFixed(1);
-}
+import { useToast } from '@/shared/ui/toast/toast-provider';
 
 function parseStorageType(value: string | null): '' | StorageType {
   if (value === 'DRY' || value === 'COOL' || value === 'FRZ') return value;
@@ -22,7 +18,7 @@ function parseStorageType(value: string | null): '' | StorageType {
 }
 
 function warehouseDisplay(type: string): string {
-  return type; // DRY, COOL, FRZ 모두 타입만 표시
+  return type;
 }
 
 type StockSortKey =
@@ -53,36 +49,17 @@ function parseSortDir(value: string | null): 'asc' | 'desc' {
   return value === 'desc' ? 'desc' : 'asc';
 }
 
-function parseExpirySoon(value: string | null): ExpirySoonDays | undefined {
-  const n = Number(value);
-  if ([7, 14, 30, 60, 90].includes(n)) return n as ExpirySoonDays;
-  return undefined;
-}
-
-export default function StocksPage() {
+export default function StocksManagePage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { me } = useAuthSession();
-  const initialRange = useMemo<ItemAnalyticsRange>(() => {
-    const q = searchParams.get('range');
-    if (q === 'WEEK' || q === 'QUARTER' || q === 'HALF' || q === 'YEAR') return q;
-    return 'WEEK';
-  }, [searchParams]);
-  const initialItemId = useMemo(() => searchParams.get('analysisItemId') ?? '', [searchParams]);
   const initialStorageType = useMemo(
     () => parseStorageType(searchParams.get('storageType')),
     [searchParams],
   );
   const initialItemCode = useMemo(() => searchParams.get('itemCode') ?? '', [searchParams]);
-  const initialExpirySoon = useMemo(
-    () => parseExpirySoon(searchParams.get('expirySoon')),
-    [searchParams],
-  );
-  const initialShortageOnly = useMemo(
-    () => searchParams.get('shortageOnly') === '1',
-    [searchParams],
-  );
   const initialPage = useMemo(() => {
     const raw = Number(searchParams.get('page') ?? '1');
     return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1;
@@ -105,42 +82,34 @@ export default function StocksPage() {
   const {
     rows,
     loading,
-    analysisLoading,
     storageType,
     itemCode,
-    expirySoon,
-    setExpirySoon,
-    analysisItems,
-    analysisItemId,
-    analysisRange,
-    analysisTrend,
     page,
     pageSize,
     total,
     totalPages,
     setStorageType,
     setItemCode,
-    setAnalysisItemId,
-    setAnalysisRange,
+    updatingStockId,
     setPageSize,
     loadStocks,
-    loadAnalysisTrend,
+    updateStockRow,
     downloadStocksExcel,
     resetFiltersAndReload,
   } = useStocksPageWithOptions({
-    analysisItemId: initialItemId,
-    analysisRange: initialRange,
     storageType: initialStorageType,
     itemCode: initialItemCode,
-    expirySoon: initialExpirySoon,
     page: initialPage,
     pageSize: initialPageSize,
   });
-  const [shortageOnly, setShortageOnly] = useState(initialShortageOnly);
+  const [shortageOnly, setShortageOnly] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [sortKey, setSortKey] = useState<StockSortKey>(initialSortKey);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(initialSortDir);
+  const [editingStockId, setEditingStockId] = useState<string | null>(null);
+  const [editingOnHand, setEditingOnHand] = useState('');
+  const [editingReserved, setEditingReserved] = useState('');
   const [lotHistoryTarget, setLotHistoryTarget] = useState<{
     lotId: string;
     lotLabel: string;
@@ -171,20 +140,6 @@ export default function StocksPage() {
       changed = true;
     }
 
-    if (analysisItemId) {
-      if (params.get('analysisItemId') !== analysisItemId) {
-        params.set('analysisItemId', analysisItemId);
-        changed = true;
-      }
-    } else if (params.has('analysisItemId')) {
-      params.delete('analysisItemId');
-      changed = true;
-    }
-
-    if (params.get('range') !== analysisRange) {
-      params.set('range', analysisRange);
-      changed = true;
-    }
     if (params.get('page') !== String(page)) {
       params.set('page', String(page));
       changed = true;
@@ -212,53 +167,11 @@ export default function StocksPage() {
       changed = true;
     }
 
-    const expirySoonStr = expirySoon != null ? String(expirySoon) : '';
-    if (params.get('expirySoon') !== expirySoonStr) {
-      if (expirySoonStr) params.set('expirySoon', expirySoonStr);
-      else params.delete('expirySoon');
-      changed = true;
-    }
-
     if (!changed) return;
     const next = params.toString();
     router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
-  }, [
-    analysisItemId,
-    analysisRange,
-    itemCode,
-    expirySoon,
-    page,
-    pageSize,
-    pathname,
-    router,
-    searchParams,
-    shortageOnly,
-    sortDir,
-    sortKey,
-    storageType,
-  ]);
+  }, [itemCode, page, pageSize, pathname, router, searchParams, shortageOnly, sortDir, sortKey, storageType]);
 
-  const maxBucketValue = useMemo(() => {
-    const maxValue =
-      analysisTrend?.buckets.reduce((max, bucket) => {
-        return Math.max(max, bucket.outboundQty, bucket.returnQty);
-      }, 0) ?? 0;
-    return maxValue > 0 ? maxValue : 1;
-  }, [analysisTrend]);
-
-  const rangeLabel: Record<ItemAnalyticsRange, string> = {
-    WEEK: '주간',
-    QUARTER: '분기',
-    HALF: '반기',
-    YEAR: '연간',
-  };
-  const paginationPages = useMemo(() => {
-    if (totalPages <= 1) return [] as number[];
-    const start = Math.max(1, page - 2);
-    const end = Math.min(totalPages, start + 4);
-    const adjustedStart = Math.max(1, end - 4);
-    return Array.from({ length: end - adjustedStart + 1 }, (_, idx) => adjustedStart + idx);
-  }, [page, totalPages]);
   const displayedRows = useMemo(
     () => (shortageOnly ? rows.filter((row) => row.onHand - row.reserved < 0) : rows),
     [rows, shortageOnly],
@@ -303,7 +216,6 @@ export default function StocksPage() {
     setSortDir('asc');
   }
 
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const media = window.matchMedia('(max-width: 767px)');
@@ -331,13 +243,53 @@ export default function StocksPage() {
     return () => observer.disconnect();
   }, [isMobile, loadStocks, loading, page, totalPages]);
 
+  function beginEdit(row: StockRow) {
+    setEditingStockId(row.id);
+    setEditingOnHand((Math.round(row.onHand * 10) / 10).toFixed(1));
+    setEditingReserved((Math.round(row.reserved * 10) / 10).toFixed(1));
+  }
+
+  async function saveEdit(row: StockRow) {
+    const onHand = Number(editingOnHand);
+    const reserved = Number(editingReserved);
+    if (!Number.isFinite(onHand) || onHand < 0) {
+      showToast('현재고는 0 이상의 숫자여야 합니다.', 'error');
+      return;
+    }
+    if (!Number.isFinite(reserved) || reserved < 0) {
+      showToast('예약 수량은 0 이상의 숫자여야 합니다.', 'error');
+      return;
+    }
+    await updateStockRow({
+      stockId: row.id,
+      onHand,
+      reserved,
+      memo: '재고 관리 화면 수동 수정',
+    });
+    setEditingStockId(null);
+  }
+
+  const paginationPages = useMemo(() => {
+    if (totalPages <= 1) return [] as number[];
+    const start = Math.max(1, page - 2);
+    const end = Math.min(totalPages, start + 4);
+    const adjustedStart = Math.max(1, end - 4);
+    return Array.from({ length: end - adjustedStart + 1 }, (_, idx) => adjustedStart + idx);
+  }, [page, totalPages]);
+
   return (
     <>
       <section className="page-section">
-        <h2 className="page-title">재고 조회</h2>
+        <h2 className="page-title">재고 관리</h2>
         <p className="page-description">
-          창고 타입/품목코드로 필터링해 현재고, 예약수량, 가용수량을 확인합니다.
+          현재고·예약수량을 조정합니다. ADMIN, WH_MANAGER만 접근 가능합니다.
         </p>
+
+        <div className="mt-4 flex items-center gap-2 text-sm text-slate-600">
+          <Link href="/stocks" className="underline hover:text-slate-800">
+            ← 재고 조회
+          </Link>
+        </div>
 
         <div className="mt-4 grid grid-cols-2 items-center gap-3 sm:grid-cols-[160px_1fr_auto] sm:gap-4">
           <select
@@ -375,9 +327,7 @@ export default function StocksPage() {
               {loading ? '조회 중...' : '조회'}
             </ActionButton>
             <ActionButton
-              onClick={() => {
-                void resetFiltersAndReload();
-              }}
+              onClick={() => void resetFiltersAndReload()}
               disabled={loading}
               size="md"
               variant="secondary"
@@ -406,59 +356,60 @@ export default function StocksPage() {
         <div className="table-wrapper mt-5">
           <table className="data-table min-w-[840px]">
             <thead>
-                <tr>
-                  <SortableHeader
-                    label="창고"
-                    sortKey="warehouseType"
-                    currentSortKey={sortKey}
-                    currentSortDir={sortDir}
-                    onSort={(k) => toggleSort(k as StockSortKey)}
-                  />
-                  <SortableHeader
-                    label="품목코드"
-                    sortKey="itemCode"
-                    currentSortKey={sortKey}
-                    currentSortDir={sortDir}
-                    onSort={(k) => toggleSort(k as StockSortKey)}
-                  />
-                  <SortableHeader
-                    label="품목명"
-                    sortKey="itemName"
-                    currentSortKey={sortKey}
-                    currentSortDir={sortDir}
-                    onSort={(k) => toggleSort(k as StockSortKey)}
-                  />
-                  <SortableHeader
-                    label="유통기한"
-                    sortKey="expiryDate"
-                    currentSortKey={sortKey}
-                    currentSortDir={sortDir}
-                    onSort={(k) => toggleSort(k as StockSortKey)}
-                  />
-                  <SortableHeader
-                    label="현재고"
-                    sortKey="onHand"
-                    currentSortKey={sortKey}
-                    currentSortDir={sortDir}
-                    onSort={(k) => toggleSort(k as StockSortKey)}
-                  />
-                  <SortableHeader
-                    label="예약"
-                    sortKey="reserved"
-                    currentSortKey={sortKey}
-                    currentSortDir={sortDir}
-                    onSort={(k) => toggleSort(k as StockSortKey)}
-                  />
-                  <SortableHeader
-                    label="가용"
-                    sortKey="available"
-                    currentSortKey={sortKey}
-                    currentSortDir={sortDir}
-                    onSort={(k) => toggleSort(k as StockSortKey)}
-                  />
-                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-600">이력</th>
-                </tr>
-              </thead>
+              <tr>
+                <SortableHeader
+                  label="창고"
+                  sortKey="warehouseType"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={(k) => toggleSort(k as StockSortKey)}
+                />
+                <SortableHeader
+                  label="품목코드"
+                  sortKey="itemCode"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={(k) => toggleSort(k as StockSortKey)}
+                />
+                <SortableHeader
+                  label="품목명"
+                  sortKey="itemName"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={(k) => toggleSort(k as StockSortKey)}
+                />
+                <SortableHeader
+                  label="유통기한"
+                  sortKey="expiryDate"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={(k) => toggleSort(k as StockSortKey)}
+                />
+                <SortableHeader
+                  label="현재고"
+                  sortKey="onHand"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={(k) => toggleSort(k as StockSortKey)}
+                />
+                <SortableHeader
+                  label="예약"
+                  sortKey="reserved"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={(k) => toggleSort(k as StockSortKey)}
+                />
+                <SortableHeader
+                  label="가용"
+                  sortKey="available"
+                  currentSortKey={sortKey}
+                  currentSortDir={sortDir}
+                  onSort={(k) => toggleSort(k as StockSortKey)}
+                />
+                <th className="px-4 py-2 text-left text-xs font-medium text-slate-600">이력</th>
+                <th>관리</th>
+              </tr>
+            </thead>
             <tbody>
               {!loading &&
                 sortedRows.map((row) => {
@@ -477,10 +428,32 @@ export default function StocksPage() {
                           : '-'}
                       </td>
                       <td className="px-4 py-3">
-                        {formatDecimalForDisplay(row.onHand)}
+                        {editingStockId === row.id ? (
+                          <input
+                            value={editingOnHand}
+                            onChange={(e) => setEditingOnHand(e.target.value)}
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            className="form-input h-8 w-24 px-2 text-xs"
+                          />
+                        ) : (
+                          formatDecimalForDisplay(row.onHand)
+                        )}
                       </td>
                       <td className="px-4 py-3">
-                        {formatDecimalForDisplay(row.reserved)}
+                        {editingStockId === row.id ? (
+                          <input
+                            value={editingReserved}
+                            onChange={(e) => setEditingReserved(e.target.value)}
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            className="form-input h-8 w-24 px-2 text-xs"
+                          />
+                        ) : (
+                          formatDecimalForDisplay(row.reserved)
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -511,6 +484,36 @@ export default function StocksPage() {
                         >
                           이력
                         </ActionButton>
+                      </td>
+                      <td className="px-4 py-3">
+                        {editingStockId === row.id ? (
+                          <div className="flex gap-1">
+                            <ActionButton
+                              onClick={() => void saveEdit(row)}
+                              disabled={updatingStockId === row.id}
+                              size="sm"
+                              variant="secondary"
+                            >
+                              {updatingStockId === row.id ? '저장 중' : '저장'}
+                            </ActionButton>
+                            <ActionButton
+                              onClick={() => setEditingStockId(null)}
+                              disabled={updatingStockId === row.id}
+                              size="sm"
+                              variant="secondary"
+                            >
+                              취소
+                            </ActionButton>
+                          </div>
+                        ) : (
+                          <ActionButton
+                            onClick={() => beginEdit(row)}
+                            size="sm"
+                            variant="secondary"
+                          >
+                            수정
+                          </ActionButton>
+                        )}
                       </td>
                     </tr>
                   );
@@ -628,124 +631,6 @@ export default function StocksPage() {
             재고 전체 엑셀 다운로드
           </ActionButton>
         </div>
-      </section>
-
-      <section className="page-section">
-        <h2 className="page-title">아이템별 출고/리턴 분석</h2>
-        <p className="page-description">
-          아이템 단위로 기간별 출고량, 리턴량, 리턴율을 함께 확인합니다.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3">
-          <select
-            value={analysisItemId}
-            onChange={(e) => setAnalysisItemId(e.target.value)}
-            className="form-select w-full sm:w-[200px]"
-          >
-            <option value="">아이템 선택</option>
-            {analysisItems.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.itemCode} - {item.itemName}
-              </option>
-            ))}
-          </select>
-          <select
-            value={analysisRange}
-            onChange={(e) => setAnalysisRange(e.target.value as ItemAnalyticsRange)}
-            className="form-select w-full sm:w-[120px]"
-          >
-            <option value="WEEK">주간</option>
-            <option value="QUARTER">분기</option>
-            <option value="HALF">반기</option>
-            <option value="YEAR">연간</option>
-          </select>
-          <ActionButton
-            onClick={() => void loadAnalysisTrend()}
-            disabled={analysisLoading || !analysisItemId}
-            variant="secondary"
-            size="md"
-          >
-            {analysisLoading ? '분석 중...' : '분석 갱신'}
-          </ActionButton>
-        </div>
-
-        {!analysisItemId ? (
-          <p className="mt-3 text-sm text-slate-600">분석할 아이템을 선택해주세요.</p>
-        ) : analysisLoading ? (
-          <p className="mt-3 text-sm text-slate-600">분석 데이터를 불러오는 중...</p>
-        ) : !analysisTrend ? (
-          <p className="mt-3 text-sm text-slate-600">분석 데이터가 없습니다.</p>
-        ) : (
-          <>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">{rangeLabel[analysisTrend.range]} 출고량</p>
-                <p className="mt-1 text-xl font-semibold text-slate-800">
-                  {formatDecimalForDisplay(analysisTrend.totals.outboundQty)}
-                </p>
-              </article>
-              <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">{rangeLabel[analysisTrend.range]} 리턴량</p>
-                <p className="mt-1 text-xl font-semibold text-slate-800">
-                  {formatDecimalForDisplay(analysisTrend.totals.returnQty)}
-                </p>
-              </article>
-              <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs text-slate-500">리턴율</p>
-                <p className="mt-1 text-xl font-semibold text-slate-800">
-                  {formatRate(analysisTrend.totals.returnRate)}%
-                </p>
-              </article>
-            </div>
-
-            <div className="mt-4 overflow-x-auto">
-              <div className="min-w-[860px] rounded-lg border border-slate-200 p-3">
-                <div className="grid grid-cols-12 gap-2">
-                  {analysisTrend.buckets.map((bucket) => {
-                    const outboundHeight = Math.max(
-                      4,
-                      Math.round((bucket.outboundQty / maxBucketValue) * 120),
-                    );
-                    const returnHeight = Math.max(
-                      4,
-                      Math.round((bucket.returnQty / maxBucketValue) * 120),
-                    );
-                    return (
-                      <div key={bucket.label} className="col-span-1 min-w-0 text-center">
-                        <div className="flex h-36 items-end justify-center gap-1 rounded-md bg-slate-50 px-1 py-2">
-                          <div
-                            className="w-2 rounded-sm bg-blue-500"
-                            style={{ height: `${outboundHeight}px` }}
-                            title={`출고 ${formatDecimalForDisplay(bucket.outboundQty)}`}
-                          />
-                          <div
-                            className="w-2 rounded-sm bg-emerald-500"
-                            style={{ height: `${returnHeight}px` }}
-                            title={`리턴 ${formatDecimalForDisplay(bucket.returnQty)}`}
-                          />
-                        </div>
-                        <p className="mt-1 truncate text-[10px] text-slate-500">{bucket.label}</p>
-                        <p className="text-[10px] text-slate-700">
-                          {formatRate(bucket.returnRate)}%
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-sm bg-blue-500" />
-                    출고
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-2 w-2 rounded-sm bg-emerald-500" />
-                    리턴
-                  </span>
-                  <span>기준 시각: {new Date(analysisTrend.asOf).toLocaleString()}</span>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
       </section>
 
       {lotHistoryTarget && (

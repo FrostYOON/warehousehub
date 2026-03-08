@@ -4,6 +4,8 @@ import {
   canAccessInbound,
   canAccessTemperatureMonitor,
   canAccessTransfers,
+  canEditStock,
+  canViewStock,
 } from '@/features/auth/model/role-policy';
 import type { UserRole } from '@/features/auth/model/types';
 import type { DashboardMenu } from '@/features/dashboard/model/types';
@@ -15,8 +17,13 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
     menus.push({ label: '대시보드', description: '요약 현황', href: '/' });
   }
 
+  if (canViewStock(role)) {
+    menus.push({ label: '재고 조회', description: '재고·로트 현황', href: '/stocks' });
+  }
+  if (canEditStock(role)) {
+    menus.push({ label: '재고 관리', description: '재고 수정·조정', href: '/stocks/manage' });
+  }
   menus.push(
-    { label: '재고', description: '재고·로트 현황', href: '/stocks' },
     { label: '출고', description: '오더·피킹·배송', href: '/outbound' },
     { label: '반품', description: '접수·결정·처리', href: '/returns' },
   );

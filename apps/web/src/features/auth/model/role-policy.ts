@@ -77,9 +77,29 @@ export function canAccessCustomers(_role?: UserRole): boolean {
   return true;
 }
 
-/** 재고 수량 조정: ADMIN만 */
+/** 재고 조회: ADMIN, WH_MANAGER, DELIVERY, ACCOUNTING, SALES */
+const STOCKS_VIEW_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'WH_MANAGER',
+  'DELIVERY',
+  'ACCOUNTING',
+  'SALES',
+]);
+
+/** 재고 수정(관리): ADMIN, WH_MANAGER */
+const STOCKS_EDIT_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'WH_MANAGER',
+]);
+
+export function canViewStock(role?: UserRole): boolean {
+  if (!role) return false;
+  return STOCKS_VIEW_ROLES.has(role);
+}
+
 export function canEditStock(role?: UserRole): boolean {
-  return role === 'ADMIN';
+  if (!role) return false;
+  return STOCKS_EDIT_ROLES.has(role);
 }
 
 /** 출고 오더 취소: ADMIN, SALES */
