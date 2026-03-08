@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { getLoginCompanies, login } from '@/features/auth/api/auth.api';
+import { canAccessDashboard } from '@/features/auth/model/role-policy';
+import type { LoginCompany, UserRole } from '@/features/auth/model/types';
 import { getErrorMessage } from '@/shared/utils/get-error-message';
-import type { LoginCompany } from '@/features/auth/model/types';
 import { useToast } from '@/shared/ui/toast/toast-provider';
 
 export function useLoginForm() {
@@ -58,7 +59,7 @@ export function useLoginForm() {
         email: email.trim(),
         password: password.trim(),
       });
-      const defaultPath = res?.user?.role === 'ADMIN' ? '/' : '/stocks';
+      const defaultPath = canAccessDashboard(res?.user?.role as UserRole) ? '/' : '/stocks';
       router.replace(defaultPath);
       router.refresh();
     } catch (err: unknown) {

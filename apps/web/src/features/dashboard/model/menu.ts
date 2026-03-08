@@ -3,6 +3,7 @@ import {
   canAccessDashboard,
   canAccessInbound,
   canAccessTemperatureMonitor,
+  canAccessTransfers,
 } from '@/features/auth/model/role-policy';
 import type { UserRole } from '@/features/auth/model/types';
 import type { DashboardMenu } from '@/features/dashboard/model/types';
@@ -43,6 +44,14 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
       label: '재고 실사',
       description: '계획·실사·확정',
       href: '/stocktaking',
+    });
+  }
+
+  if (canAccessTransfers(role)) {
+    menus.push({
+      label: '창고 간 이동',
+      description: '지사별 창고 간 재고 이동',
+      href: '/transfers',
     });
   }
 

@@ -39,13 +39,13 @@ export class ReturnsController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.DELIVERY, Role.SALES, Role.WH_MANAGER)
+  @Roles(Role.ADMIN, Role.DELIVERY, Role.SALES, Role.WH_MANAGER, Role.ACCOUNTING)
   list(@Req() req: Request) {
     return this.returns.list(req.user!.companyId);
   }
 
   @Get('export')
-  @Roles(Role.ADMIN, Role.DELIVERY, Role.SALES, Role.WH_MANAGER)
+  @Roles(Role.ADMIN, Role.DELIVERY, Role.SALES, Role.WH_MANAGER, Role.ACCOUNTING)
   @Header(
     'Content-Type',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -58,7 +58,7 @@ export class ReturnsController {
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.DELIVERY, Role.SALES, Role.WH_MANAGER)
+  @Roles(Role.ADMIN, Role.DELIVERY, Role.SALES, Role.WH_MANAGER, Role.ACCOUNTING)
   detail(@Req() req: Request, @Param('id') id: string) {
     return this.returns.detail(req.user!.companyId, id);
   }
