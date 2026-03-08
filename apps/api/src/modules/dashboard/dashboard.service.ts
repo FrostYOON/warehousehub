@@ -509,6 +509,19 @@ export class DashboardService {
         href: '/returns',
       });
     }
+    const expirySoonTotal = expiryWithin7 + expiryWithin14 + expiryWithin30;
+    if (expirySoonTotal >= 1) {
+      const level = expiryWithin7 >= 1 ? 'critical' : 'warning';
+      const daysLabel = expiryWithin7 >= 1 ? '7일' : expiryWithin14 >= 1 ? '14일' : '30일';
+      const daysParam = expiryWithin7 >= 1 ? 7 : expiryWithin14 >= 1 ? 14 : 30;
+      alertsById.set('expiry-soon', {
+        id: 'expiry-soon',
+        level,
+        label: `유통기한 임박 (${daysLabel} 이내)`,
+        value: expirySoonTotal,
+        href: `/stocks?expirySoon=${daysParam}`,
+      });
+    }
     const alerts = Array.from(alertsById.values());
     alerts.sort((a, b) => {
       const levelGap =
@@ -531,6 +544,15 @@ export class DashboardService {
         value: returnsDecidedPending,
         href: '/returns',
       });
+      const expirySoonTotal = expiryWithin7 + expiryWithin14 + expiryWithin30;
+      if (expirySoonTotal >= 1) {
+        todos.push({
+          id: 'todo-expiry-soon',
+          label: '유통기한 30일 이내',
+          value: expirySoonTotal,
+          href: '/stocks?expirySoon=30',
+        });
+      }
     }
     if (role === Role.ADMIN || role === Role.WH_MANAGER) {
       todos.push({
