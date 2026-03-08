@@ -7,6 +7,7 @@ import {
   canAccessCost,
   canAccessDashboard,
   canAccessInbound,
+  canAccessInventoryForecast,
   canAccessMembers,
   canAccessTemperatureMonitor,
   canAccessTransfers,
@@ -31,6 +32,7 @@ const ASN_PATH = '/asn';
 const STOCKS_PATH = '/stocks';
 const STOCKS_MANAGE_PATH = '/stocks/manage';
 const COST_PATH = '/cost';
+const INVENTORY_FORECAST_PATH = '/inventory-forecast';
 
 function getDefaultRedirectPath(role?: string): string {
   if (canAccessDashboard(role as Parameters<typeof canAccessDashboard>[0])) {
@@ -110,6 +112,15 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
     }
 
     if (pathname === COST_PATH && !canAccessCost(role)) {
+      router.replace('/stocks');
+      return;
+    }
+
+    if (
+      (pathname === INVENTORY_FORECAST_PATH ||
+        pathname.startsWith('/inventory-forecast/')) &&
+      !canAccessInventoryForecast(role)
+    ) {
       router.replace('/stocks');
       return;
     }

@@ -89,6 +89,19 @@ export function canAccessCost(role?: UserRole): boolean {
   return COST_ALLOWED_ROLES.has(role);
 }
 
+/** 재고 예측/발주 제안: ADMIN, WH_MANAGER, ACCOUNTING, SALES */
+const INVENTORY_FORECAST_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'WH_MANAGER',
+  'ACCOUNTING',
+  'SALES',
+]);
+
+export function canAccessInventoryForecast(role?: UserRole): boolean {
+  if (!role) return false;
+  return INVENTORY_FORECAST_ROLES.has(role);
+}
+
 /** 대시보드: ADMIN, WH_MANAGER, SALES, ACCOUNTING (DELIVERY 제외) */
 export function canAccessDashboard(role?: UserRole): boolean {
   if (!role) return false;
