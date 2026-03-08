@@ -6,6 +6,7 @@
 
 - [docs/REQUIREMENTS_REFINED.md](./REQUIREMENTS_REFINED.md) — 상세 요구사항, Phase별 로드맵
 - [docs/FEATURES_OVERVIEW.md](./FEATURES_OVERVIEW.md) — 기능 개요, 우선순위
+- [docs/SETUP.md](./SETUP.md) — 로그인·프록시·CORS·쿠키 설정 가이드
 
 ---
 
