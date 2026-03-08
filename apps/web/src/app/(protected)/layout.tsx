@@ -77,7 +77,8 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (pathname === STOCKTAKING_PATH && !canAccessInbound(role)) {
+    // 재고 실사 제거: /stocktaking 접근 시 항상 /stocks로 리다이렉트
+    if (pathname === STOCKTAKING_PATH) {
       router.replace('/stocks');
       return;
     }

@@ -47,11 +47,6 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
       description: '품목 마스터',
       href: '/items',
     });
-    menus.push({
-      label: '재고 실사',
-      description: '계획·실사·확정',
-      href: '/stocktaking',
-    });
   }
 
   if (canAccessTransfers(role)) {

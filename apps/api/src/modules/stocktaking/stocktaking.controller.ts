@@ -26,6 +26,10 @@ type AuthedRequest = Request & {
   user: { companyId: string; userId: string; role: Role };
 };
 
+/**
+ * @deprecated 재고 실사 기능 제거(Phase 1). API는 호환성 유지를 위해 당분간 유지.
+ * 클라이언트 메뉴·페이지는 제거됨.
+ */
 @ApiTags('Stocktaking')
 @ApiBearerAuth('access-token')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
