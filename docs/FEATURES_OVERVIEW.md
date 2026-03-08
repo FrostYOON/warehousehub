@@ -224,6 +224,7 @@
 
 - `docs/REQUIREMENTS_REFINED.md` — 지사 구조, 입고 예정 흐름, 역할 체계, 담당부서/관리자, 스키마 영향도, Phase별 구현 로드맵
 - `docs/GIT_WORKFLOW.md` — feature merge 전략
+- `docs/SETUP.md` — 로그인·프록시·CORS·쿠키 설정 가이드
 
 ---
 
