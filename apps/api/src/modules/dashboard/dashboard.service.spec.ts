@@ -26,6 +26,7 @@ describe('DashboardService', () => {
     outboundOrder: { count: jest.fn() },
     returnReceipt: { count: jest.fn() },
     user: { count: jest.fn() },
+    temperatureLog: { count: jest.fn() },
     stock: { groupBy: jest.fn() },
     lot: { count: jest.fn() },
     outboundLine: { findMany: jest.fn() },
@@ -56,6 +57,7 @@ describe('DashboardService', () => {
     prismaMock.returnReceipt.count.mockResolvedValueOnce(5);
     prismaMock.user.count.mockResolvedValueOnce(2);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(3);
+    prismaMock.temperatureLog.count.mockResolvedValueOnce(0);
     prismaMock.stock.groupBy.mockResolvedValueOnce([]);
     prismaMock.lot.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(3);
@@ -102,6 +104,7 @@ describe('DashboardService', () => {
     prismaMock.returnReceipt.count.mockResolvedValueOnce(4);
     prismaMock.user.count.mockResolvedValueOnce(5);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
+    prismaMock.temperatureLog.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(0);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(6);
@@ -115,6 +118,7 @@ describe('DashboardService', () => {
     expect(admin.todos.map((todo) => todo.id)).toEqual([
       'todo-inbound-confirm',
       'todo-returns-decide',
+      'todo-temperature-record',
       'todo-outbound-shipping',
       'todo-approvals',
     ]);
@@ -128,6 +132,7 @@ describe('DashboardService', () => {
     prismaMock.inboundUpload.count.mockResolvedValueOnce(0);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
     prismaMock.returnReceipt.count.mockResolvedValueOnce(6);
+    prismaMock.temperatureLog.count.mockResolvedValueOnce(0);
     const sales = await service.summary(
       'c-1',
       Role.SALES,
@@ -145,6 +150,7 @@ describe('DashboardService', () => {
     prismaMock.returnReceipt.count.mockResolvedValueOnce(0);
     prismaMock.user.count.mockResolvedValueOnce(0);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
+    prismaMock.temperatureLog.count.mockResolvedValueOnce(0);
     prismaMock.stock.groupBy.mockResolvedValueOnce([]);
     prismaMock.lot.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(0);
@@ -204,6 +210,7 @@ describe('DashboardService', () => {
     prismaMock.returnReceipt.count.mockResolvedValueOnce(0);
     prismaMock.user.count.mockResolvedValueOnce(0);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
+    prismaMock.temperatureLog.count.mockResolvedValueOnce(0);
     prismaMock.stock.groupBy.mockResolvedValueOnce([]);
     prismaMock.lot.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(1);
@@ -229,6 +236,7 @@ describe('DashboardService', () => {
     prismaMock.returnReceipt.count.mockResolvedValueOnce(0);
     prismaMock.user.count.mockResolvedValueOnce(0);
     prismaMock.outboundOrder.count.mockResolvedValueOnce(0);
+    prismaMock.temperatureLog.count.mockResolvedValueOnce(0);
     prismaMock.stock.groupBy.mockResolvedValueOnce([]);
     prismaMock.lot.count.mockResolvedValueOnce(0);
     prismaMock.inboundUpload.count.mockResolvedValueOnce(0);

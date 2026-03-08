@@ -55,6 +55,7 @@ describe('UsersService', () => {
           name: 'Alice',
           role: Role.DELIVERY,
           isActive: true,
+          branchUsers: [],
         },
       ]);
 
@@ -146,6 +147,7 @@ describe('UsersService', () => {
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        branchUsers: [],
       };
       prismaMock.user.create.mockResolvedValue(created);
 
@@ -157,7 +159,17 @@ describe('UsersService', () => {
         role: Role.DELIVERY,
       });
 
-      expect(result).toEqual(created);
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: 'user-1',
+          email: 'staff@co.com',
+          name: 'Staff',
+          role: Role.DELIVERY,
+          isActive: true,
+          branchIds: [],
+          branches: [],
+        }),
+      );
       expect(prismaMock.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -172,7 +184,11 @@ describe('UsersService', () => {
     });
 
     it('uses isActive false when provided', async () => {
-      prismaMock.user.create.mockResolvedValue({ id: 'u1', isActive: false });
+      prismaMock.user.create.mockResolvedValue({
+        id: 'u1',
+        isActive: false,
+        branchUsers: [],
+      });
 
       await service.createUser({
         companyId: 'c1',

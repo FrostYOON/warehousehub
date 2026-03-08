@@ -99,13 +99,15 @@ describe('UsersController', () => {
       const result = await controller.create(req, dto);
 
       expect(hashPassword).toHaveBeenCalledWith('User1234!');
-      expect(usersServiceMock.createUser).toHaveBeenCalledWith({
-        companyId: 'company-1',
-        email: dto.email,
-        name: dto.name,
-        passwordHash: 'hashed-password',
-        role: dto.role,
-      });
+      expect(usersServiceMock.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          companyId: 'company-1',
+          email: dto.email,
+          name: dto.name,
+          passwordHash: 'hashed-password',
+          role: dto.role,
+        }),
+      );
       expect(result).toEqual(created);
     });
   });

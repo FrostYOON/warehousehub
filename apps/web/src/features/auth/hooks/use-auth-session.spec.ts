@@ -1,3 +1,4 @@
+import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react';
 import { useAuthSession } from './use-auth-session';
 import { AuthSessionProvider } from '@/features/auth/context/auth-session-context';
@@ -25,7 +26,7 @@ vi.mock('@/shared/ui/toast/toast-provider', () => ({
 }));
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  return <AuthSessionProvider>{children}</AuthSessionProvider>;
+  return React.createElement(AuthSessionProvider, null, children);
 }
 
 describe('useAuthSession', () => {
