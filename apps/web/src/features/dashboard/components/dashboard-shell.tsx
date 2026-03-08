@@ -10,6 +10,8 @@ import { HeaderTemperatureBadge } from './header-temperature-badge';
 type DashboardShellProps = {
   userName: string;
   companyName: string;
+  companyLogoUrl?: string | null;
+  companyBrandPrimaryColor?: string | null;
   onLogout: () => void;
   loggingOut: boolean;
   menus?: DashboardMenu[];
@@ -66,12 +68,15 @@ function UserCircleIcon({ className }: { className?: string }) {
 export function DashboardShell({
   userName,
   companyName,
+  companyLogoUrl,
+  companyBrandPrimaryColor,
   onLogout,
   loggingOut,
   menus = MENUS,
   canRecordTemperature = false,
   children,
 }: DashboardShellProps) {
+  const brandColor = companyBrandPrimaryColor ?? '#0f172a'; // slate-900 fallback
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -97,8 +102,9 @@ export function DashboardShell({
       const baseClass =
         'block rounded-lg px-2.5 py-2 text-left transition-colors duration-150';
       const activeClass = isActive
-        ? 'bg-slate-900 text-white'
+        ? 'text-white'
         : 'text-slate-700 hover:bg-slate-100';
+      const activeStyle = isActive ? { backgroundColor: brandColor } : undefined;
 
       if (menu.disabled) {
         return (
@@ -122,6 +128,7 @@ export function DashboardShell({
           key={menu.label}
           href={menu.href}
           className={`${baseClass} ${activeClass}`}
+          style={activeStyle}
           onClick={() => {
             if (isMobile) setMobileMenuOpen(false);
           }}
@@ -159,11 +166,22 @@ export function DashboardShell({
           </button>
           <Link
             href="/"
-            className="flex shrink-0 items-center gap-2 text-slate-900 no-underline transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-2 no-underline transition-opacity hover:opacity-90"
           >
-            <span className="text-lg font-bold tracking-tight text-slate-900">
-              WarehouseHub
-            </span>
+            {companyLogoUrl ? (
+              <img
+                src={companyLogoUrl}
+                alt={companyName}
+                className="h-8 w-auto max-w-[140px] object-contain"
+              />
+            ) : (
+              <span
+                className="text-lg font-bold tracking-tight"
+                style={{ color: brandColor }}
+              >
+                WarehouseHub
+              </span>
+            )}
           </Link>
           <div className="hidden min-w-0 shrink border-l border-slate-200 pl-4 md:block">
             <p

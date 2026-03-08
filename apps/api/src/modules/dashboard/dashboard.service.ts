@@ -837,6 +837,85 @@ export class DashboardService {
       todos,
     };
   }
+
+  /** 대시보드 위젯 설정 조회 */
+  async getPrefs(userId: string) {
+    const prefs = await this.prisma.userDashboardPrefs.findUnique({
+      where: { userId },
+    });
+    const defaults = {
+      widgetOrder: [] as string[],
+      widgetVisibility: {} as Record<string, boolean>,
+      widgetCollapsed: { alerts: false, todos: false, analysis: false, inventory: false } as Record<string, boolean>,
+    };
+    if (!prefs) return defaults;
+    try {
+      return {
+        widgetOrder: JSON.parse(prefs.widgetOrder) as string[],
+        widgetVisibility: JSON.parse(prefs.widgetVisibility) as Record<string, boolean>,
+        widgetCollapsed: JSON.parse(prefs.widgetCollapsed) as Record<string, boolean>,
+      };
+    } catch {
+      return defaults;
+    }
+  }
+
+  /** 대시보드 위젯 설정 저장 */
+  async savePrefs(
+    userId: string,
+    dto: {
+      widgetOrder?: string[];
+      widgetVisibility?: Record<string, boolean>;
+      widgetCollapsed?: Record<string, boolean>;
+    },
+  ) {
+    const existing = await this.prisma.userDashboardPrefs.findUnique({
+      where: { userId },
+    });
+    const safeOrder = (arr: string[] | undefined) =>
+      Array.isArray(arr) ? arr.filter((v) => typeof v === 'string') : undefined;
+    const safeObj = (o: Record<string, boolean> | undefined) =>
+      o && typeof o === 'object' ? o : undefined;
+
+    const order = safeOrder(dto.widgetOrder);
+    const visibility = safeObj(dto.widgetVisibility);
+    const collapsed = safeObj(dto.widgetCollapsed);
+
+    const current = existing
+      ? {
+          widgetOrder: JSON.parse(existing.widgetOrder) as string[],
+          widgetVisibility: JSON.parse(existing.widgetVisibility) as Record<string, boolean>,
+          widgetCollapsed: JSON.parse(existing.widgetCollapsed) as Record<string, boolean>,
+        }
+      : {
+          widgetOrder: [] as string[],
+          widgetVisibility: {} as Record<string, boolean>,
+          widgetCollapsed: {} as Record<string, boolean>,
+        };
+
+    const merged = {
+      widgetOrder: order ?? current.widgetOrder,
+      widgetVisibility: { ...current.widgetVisibility, ...visibility },
+      widgetCollapsed: { ...current.widgetCollapsed, ...collapsed },
+    };
+
+    await this.prisma.userDashboardPrefs.upsert({
+      where: { userId },
+      create: {
+        userId,
+        widgetOrder: JSON.stringify(merged.widgetOrder),
+        widgetVisibility: JSON.stringify(merged.widgetVisibility),
+        widgetCollapsed: JSON.stringify(merged.widgetCollapsed),
+      },
+      update: {
+        widgetOrder: JSON.stringify(merged.widgetOrder),
+        widgetVisibility: JSON.stringify(merged.widgetVisibility),
+        widgetCollapsed: JSON.stringify(merged.widgetCollapsed),
+        updatedAt: new Date(),
+      },
+    });
+    return merged;
+  }
 }
 
 function startOfRange(now: Date, range: DashboardAnalyticsRange): Date {

@@ -104,6 +104,11 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
   if (role === 'ADMIN') {
     menus.push(
       {
+        label: '회사 설정',
+        description: '로고·브랜드 색상',
+        href: '/settings/company',
+      },
+      {
         label: '회원 승인',
         description: '가입 승인',
         href: '/approvals',

@@ -19,6 +19,18 @@ export class MeResponseDto {
   @ApiProperty({ example: 'WarehouseHub' })
   companyName!: string;
 
+  @ApiPropertyOptional({
+    example: 'https://example.com/logo.png',
+    nullable: true,
+  })
+  companyLogoUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: '#2563eb',
+    nullable: true,
+  })
+  companyBrandPrimaryColor?: string | null;
+
   @ApiPropertyOptional({ example: '1990-01-15', nullable: true })
   dateOfBirth?: string | null;
 

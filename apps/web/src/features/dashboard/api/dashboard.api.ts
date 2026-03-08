@@ -5,6 +5,30 @@ import type {
   DashboardSummaryResponse,
 } from '@/features/dashboard/model/types';
 
+export type DashboardPrefs = {
+  widgetOrder: string[];
+  widgetVisibility: Record<string, boolean>;
+  widgetCollapsed: Record<string, boolean>;
+};
+
+export type UpdateDashboardPrefsPayload = {
+  widgetOrder?: string[];
+  widgetVisibility?: Record<string, boolean>;
+  widgetCollapsed?: Record<string, boolean>;
+};
+
+export async function getDashboardPrefs(): Promise<DashboardPrefs> {
+  const res = await httpClient.get<DashboardPrefs>('/dashboard/prefs');
+  return res.data;
+}
+
+export async function updateDashboardPrefs(
+  payload: UpdateDashboardPrefsPayload,
+): Promise<DashboardPrefs> {
+  const res = await httpClient.patch<DashboardPrefs>('/dashboard/prefs', payload);
+  return res.data;
+}
+
 export async function getDashboardSummary(
   range: DashboardAnalyticsRange,
   segmentBy: DashboardSegmentBy,

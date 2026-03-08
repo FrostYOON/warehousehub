@@ -38,6 +38,9 @@ export type MeResponse = {
   role: UserRole;
   companyId: string;
   companyName: string | null;
+  /** 멀티테넌시 브랜딩 */
+  companyLogoUrl?: string | null;
+  companyBrandPrimaryColor?: string | null;
   /** 담당 지사 ID 배열. null = 전체 지사 접근 */
   branchIds?: string[] | null;
   dateOfBirth?: string | null;
