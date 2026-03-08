@@ -18,7 +18,10 @@ import { AnalysisWidget } from '@/features/dashboard/components/home/analysis-wi
 import { DataReliabilityBadge } from '@/features/dashboard/components/home/data-reliability-badge';
 import { InventoryInsightsWidget } from '@/features/dashboard/components/home/inventory-insights-widget';
 import { TodosWidget } from '@/features/dashboard/components/home/todos-widget';
-import { WidgetFrame } from '@/features/dashboard/components/home/widget-frame';
+import {
+  WidgetFrame,
+  WIDGET_LABELS,
+} from '@/features/dashboard/components/home/widget-frame';
 import {
   type DashboardWidgetId,
   useDashboardHomeLayout,
@@ -203,8 +206,14 @@ export function AuthHome() {
     return list;
   }, [alerts.length, canSeeAlertsWidget, canSeeAnalysisWidget, canSeeInventoryWidget, todos.length]);
 
-  const { orderedVisibleWidgets, collapsed, toggleCollapsed, moveWidget } =
-    useDashboardHomeLayout(visibleWidgets);
+  const {
+    orderedVisibleWidgets,
+    collapsed,
+    toggleCollapsed,
+    moveWidget,
+    toggleWidgetVisibility,
+    hiddenWidgets,
+  } = useDashboardHomeLayout(visibleWidgets);
 
   return (
     <>
@@ -232,6 +241,21 @@ export function AuthHome() {
           </div>
         </div>
       </section>
+      {hiddenWidgets.length > 0 ? (
+        <section className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
+          <span className="text-xs font-medium text-slate-600">숨긴 위젯:</span>
+          {hiddenWidgets.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => toggleWidgetVisibility(id)}
+              className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-100"
+            >
+              + {WIDGET_LABELS[id] ?? id}
+            </button>
+          ))}
+        </section>
+      ) : null}
       {orderedVisibleWidgets.map((id, idx) => {
         const frameProps = {
           collapsed: collapsed[id],
@@ -240,6 +264,7 @@ export function AuthHome() {
           onMoveDown: () => moveWidget(id, 1),
           canMoveUp: idx > 0,
           canMoveDown: idx < orderedVisibleWidgets.length - 1,
+          onHide: () => toggleWidgetVisibility(id),
           meta: (
             <DataReliabilityBadge asOf={summary?.asOf} source="집계" autoRefreshMs={autoRefreshMs} />
           ),

@@ -306,7 +306,14 @@ export class AuthService {
     if (!user || !user.isActive) throw new UnauthorizedException();
 
     const [company, branchUsers] = await Promise.all([
-      this.prisma.company.findUnique({ where: { id: user.companyId } }),
+      this.prisma.company.findUnique({
+        where: { id: user.companyId },
+        select: {
+          name: true,
+          logoUrl: true,
+          brandPrimaryColor: true,
+        },
+      }),
       this.prisma.branchUser.findMany({
         where: { userId },
         select: { branchId: true },
@@ -320,6 +327,8 @@ export class AuthService {
       role: user.role,
       companyId: user.companyId,
       companyName: company?.name ?? null,
+      companyLogoUrl: company?.logoUrl ?? null,
+      companyBrandPrimaryColor: company?.brandPrimaryColor ?? null,
       branchIds:
         branchUsers.length > 0
           ? branchUsers.map((bu) => bu.branchId)

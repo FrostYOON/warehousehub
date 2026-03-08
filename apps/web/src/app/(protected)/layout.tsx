@@ -21,7 +21,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 const DASHBOARD_PATH = '/';
-const MEMBERS_ONLY_PATHS = ['/approvals', '/members', '/audit-logs'];
+const MEMBERS_ONLY_PATHS = ['/approvals', '/members', '/audit-logs', '/settings/company'];
 const INBOUND_PATH = '/inbound';
 const ITEMS_PATH = '/items';
 const TEMPERATURE_MONITOR_PATH = '/temperature-monitor';
@@ -157,6 +157,8 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
       <DashboardShell
         userName={me?.name ?? '사용자'}
         companyName={me?.companyName ?? '회사'}
+        companyLogoUrl={me?.companyLogoUrl ?? undefined}
+        companyBrandPrimaryColor={me?.companyBrandPrimaryColor ?? undefined}
         onLogout={signOut}
         loggingOut={loggingOut}
         menus={buildDashboardMenus(me?.role)}

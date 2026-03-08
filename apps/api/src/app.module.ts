@@ -28,6 +28,7 @@ import { TraceabilityModule } from './modules/traceability/traceability.module';
 import { StocktakingModule } from './modules/stocktaking/stocktaking.module';
 import { CostModule } from './modules/cost/cost.module';
 import { InventoryForecastModule } from './modules/inventory-forecast/inventory-forecast.module';
+import { CompaniesModule } from './modules/companies/companies.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { InventoryForecastModule } from './modules/inventory-forecast/inventory-
     StocktakingModule,
     CostModule,
     InventoryForecastModule,
+    CompaniesModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

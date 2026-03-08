@@ -1,3 +1,10 @@
+export const WIDGET_LABELS: Record<string, string> = {
+  alerts: '주의가 필요한 항목',
+  todos: '내 할 일',
+  inventory: '인벤토리 인사이트',
+  analysis: '아이템 분석 요약',
+};
+
 type WidgetFrameProps = {
   title: string;
   subtitle?: string;
@@ -10,6 +17,8 @@ type WidgetFrameProps = {
   onMoveDown: () => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  /** 위젯 숨기기 (표시/숨김 설정용) */
+  onHide?: () => void;
   children: React.ReactNode;
 };
 
@@ -24,6 +33,7 @@ export function WidgetFrame({
   onMoveDown,
   canMoveUp,
   canMoveDown,
+  onHide,
   children,
 }: WidgetFrameProps) {
   return (
@@ -98,6 +108,26 @@ export function WidgetFrame({
               </svg>
             )}
           </button>
+          {onHide ? (
+            <button
+              type="button"
+              onClick={onHide}
+              aria-label="위젯 숨기기"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-1"
+              title="위젯 숨기기"
+            >
+              <svg
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                aria-hidden
+                className="h-3.5 w-3.5"
+              >
+                <path d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19 12 19c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 5c4.97 0 9 3.134 9 7 0 2.239-1.009 4.328-2.66 5.95M3 3l14 14" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          ) : null}
           </div>
         </div>
       </div>
