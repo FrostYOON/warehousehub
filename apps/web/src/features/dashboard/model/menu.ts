@@ -5,6 +5,7 @@ import {
   canAccessCustomers,
   canAccessDashboard,
   canAccessInbound,
+  canAccessInventoryForecast,
   canAccessTemperatureMonitor,
   canAccessTransfers,
   canEditStock,
@@ -89,6 +90,14 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
       label: '비용/원가',
       description: '원가 관리·리포트',
       href: '/cost',
+    });
+  }
+
+  if (canAccessInventoryForecast(role)) {
+    menus.push({
+      label: '재고 예측',
+      description: '수요 예측·발주 제안',
+      href: '/inventory-forecast',
     });
   }
 
