@@ -117,6 +117,7 @@ model Company {
   lng        Decimal? @db.Decimal(10, 7)
 
   users      User[]
+  branches   Branch[]
   warehouses Warehouse[]
   items      Item[]
   customers  Customer[]
@@ -249,12 +250,34 @@ model UserAuditLog {
   @@index([createdAt])
 }
 
+/// 지사(브랜치) 단위. 지역·법인 등 회사 내 논리적 구분
+/// Company → Branch → Warehouse 계층
+model Branch {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name String
+  code String? // TOR, MTL 등
+
+  warehouses Warehouse[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId])
+}
+
 /// 회사 내 창고
-/// 같은 회사 내 지역별로 여러 창고 보유 가능 (예: 서울 DRY, 부산 DRY)
+/// Branch에 소속. 같은 Branch 내 여러 창고 가능 (DRY, COOL, FRZ 등)
 model Warehouse {
   id        String  @id @default(uuid())
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  branchId String
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   type   StorageType
   name   String
@@ -271,8 +294,9 @@ model Warehouse {
   transfersTo   Transfer[] @relation("TransferToWarehouse")
   stocktakings Stocktaking[]
 
-  @@unique([companyId, type, region])
+  @@unique([branchId, type, region])
   @@index([companyId])
+  @@index([branchId])
 }
 
 /// 상품 마스터

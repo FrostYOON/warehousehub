@@ -2,6 +2,7 @@
 
 import { AuthSessionProvider, useAuthSessionContext } from '@/features/auth/context/auth-session-context';
 import {
+  canAccessBranches,
   canAccessInbound,
   canAccessMembers,
   canAccessTemperatureMonitor,
@@ -17,6 +18,7 @@ const INBOUND_PATH = '/inbound';
 const ITEMS_PATH = '/items';
 const TEMPERATURE_MONITOR_PATH = '/temperature-monitor';
 const STOCKTAKING_PATH = '/stocktaking';
+const BRANCHES_PATH = '/branches';
 
 function getDefaultRedirectPath(role?: string): string {
   if (role === 'ADMIN') return '/';
@@ -58,6 +60,11 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
     }
 
     if (pathname === STOCKTAKING_PATH && !canAccessInbound(role)) {
+      router.replace('/stocks');
+      return;
+    }
+
+    if (pathname === BRANCHES_PATH && !canAccessBranches(role)) {
       router.replace('/stocks');
       return;
     }

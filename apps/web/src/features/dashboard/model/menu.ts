@@ -1,4 +1,5 @@
 import {
+  canAccessBranches,
   canAccessCustomers,
   canAccessDashboard,
   canAccessInbound,
@@ -43,6 +44,14 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
       label: '재고 실사',
       description: '계획·실사·확정',
       href: '/stocktaking',
+    });
+  }
+
+  if (canAccessBranches(role)) {
+    menus.push({
+      label: '지사',
+      description: '지사·창고 계층 관리',
+      href: '/branches',
     });
   }
 

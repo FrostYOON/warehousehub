@@ -19,6 +19,54 @@ async function main() {
     },
   });
 
+  const defaultBranch = await prisma.branch.upsert({
+    where: {
+      companyId_code: { companyId: company.id, code: 'DEFAULT' },
+    },
+    update: {},
+    create: {
+      companyId: company.id,
+      name: 'Sample Company (본사)',
+      code: 'DEFAULT',
+    },
+  });
+
+  await prisma.branch.upsert({
+    where: {
+      companyId_code: { companyId: company.id, code: 'TOR' },
+    },
+    update: {},
+    create: {
+      companyId: company.id,
+      name: '토론토',
+      code: 'TOR',
+    },
+  });
+
+  for (const [type, name] of [
+    ['DRY', 'DRY'],
+    ['COOL', 'COOL'],
+    ['FRZ', 'FRZ'],
+  ] as const) {
+    await prisma.warehouse.upsert({
+      where: {
+        branchId_type_region: {
+          branchId: defaultBranch.id,
+          type,
+          region: 'default',
+        },
+      },
+      update: {},
+      create: {
+        companyId: company.id,
+        branchId: defaultBranch.id,
+        type,
+        name,
+        region: 'default',
+      },
+    });
+  }
+
   const passwordHash = await bcrypt.hash('Admin123!', 10);
   const user = await prisma.user.upsert({
     where: {
@@ -38,7 +86,11 @@ async function main() {
     },
   });
 
-  console.log('Seeded:', { companyId: company.id, userId: user.id });
+  console.log('Seeded:', {
+    companyId: company.id,
+    branchId: defaultBranch.id,
+    userId: user.id,
+  });
 }
 
 main()
