@@ -11,6 +11,7 @@ import type { StorageType } from '@/features/stocks/model/types';
 import { formatDecimalForDisplay } from '@/shared/utils/format-decimal';
 import { buildGoogleMapsDirectionUrl } from '@/shared/utils/google-maps';
 import { ActionButton, SortableHeader, StatusBadge } from '@/shared/ui/common';
+import { OrderPrintPdfButtons } from '@/features/outbound/components/order-print-pdf-buttons';
 
 export default function OutboundPage() {
   const searchParams = useSearchParams();
@@ -587,6 +588,12 @@ export default function OutboundPage() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="page-subtitle">오더 상세</h3>
           <div className="flex flex-wrap items-center gap-2">
+            {selectedOrder && (
+              <OrderPrintPdfButtons
+                order={selectedOrder}
+                outboundDisplayNo={outboundDisplayNo(selectedOrder)}
+              />
+            )}
             {selectedOrder?.customer &&
               (() => {
                 const mapsUrl = buildGoogleMapsDirectionUrl(selectedOrder.customer);
