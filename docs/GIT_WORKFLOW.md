@@ -40,7 +40,7 @@
 5. 원격 반영
    git push origin main
 
-6. (선택) feature 브랜치 삭제
+6. merge 완료 후 feature 브랜치 정리 (권장)
    git branch -d feature/<기능명>
    git push origin --delete feature/<기능명>
 ```
@@ -108,7 +108,27 @@ git merge feature/xxx --no-ff -m "Merge feature/xxx: 요약"
 
 ---
 
-## 7. 체크리스트
+## 7. Merge 완료 후 브랜치 정리
+
+| 단계 | 명령 | 설명 |
+|------|------|------|
+| 1 | `git branch -d feature/<기능명>` | 로컬 feature 브랜치 삭제 |
+| 2 | `git push origin --delete feature/<기능명>` | 원격 feature 브랜치 삭제 |
+
+**일괄 정리 (merge 완료된 브랜치 확인)**
+
+```bash
+# main에 merge된 브랜치 목록 확인
+git branch --merged main
+
+# 위 목록에서 삭제할 브랜치를 선택 후
+git branch -d feature/<기능명>
+git push origin --delete feature/<기능명>
+```
+
+---
+
+## 8. 체크리스트
 
 **feature 시작 전**
 
@@ -122,6 +142,7 @@ git merge feature/xxx --no-ff -m "Merge feature/xxx: 요약"
 - [ ] `git merge feature/<기능명> --no-ff` 실행
 - [ ] 충돌 발생 시 해결 후 merge
 - [ ] `git push origin main`
+- [ ] merge 후 feature 브랜치 로컬·원격 삭제
 
 **PR 사용 시**
 
