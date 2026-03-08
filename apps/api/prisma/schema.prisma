@@ -195,6 +195,14 @@ model User {
   isActive     Boolean @default(true)
   lastLoginAt DateTime?
 
+  /// 부서 코드 (예: SALES, ACCOUNTING, WAREHOUSE, DELIVERY)
+  departmentCode String?
+
+  /// 상위 관리자 (부서장 등)
+  supervisorId String?
+  supervisor   User?   @relation("UserSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
+  supervisees  User[]  @relation("UserSupervisor")
+
   /// 비밀번호 재설정용 토큰 (forgot-password 발급)
   passwordResetToken   String?
   passwordResetExpires DateTime?
@@ -217,6 +225,9 @@ model User {
 
   /// 이 사용자가 업로드한 입고 엑셀
   inboundUploads InboundUpload[]
+
+  /// 담당 지사 매핑 (비어있으면 전체 지사 접근)
+  branchUsers BranchUser[]
 
   createdOutboundOrders         OutboundOrder[]     @relation("OutboundCreatedBy")
   pickedSubmittedOutboundOrders OutboundOrder[]     @relation("OutboundPickedSubmittedBy")
@@ -241,6 +252,7 @@ model User {
   @@unique([companyId, email])
   @@index([companyId])
   @@index([role])
+  @@index([supervisorId])
 }
 
 /// 사용자 변경 감사 로그 (역할 변경, 활성화, 비활성화 등)
@@ -270,15 +282,33 @@ model Branch {
   name String
   code String? // TOR, MTL 등
 
-  warehouses Warehouse[]
-  asnsFrom   Asn[]    @relation("AsnFromBranch")
-  asnsTo     Asn[]    @relation("AsnToBranch")
+  warehouses  Warehouse[]
+  asnsFrom    Asn[]        @relation("AsnFromBranch")
+  asnsTo      Asn[]        @relation("AsnToBranch")
+  branchUsers BranchUser[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([companyId, code])
   @@index([companyId])
+}
+
+/// User ↔ Branch 담당 지사 매핑
+/// 담당 지사가 없으면 전체 지사 접근, 있으면 해당 지사만 조회 가능
+model BranchUser {
+  id       String @id @default(uuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, branchId])
+  @@index([userId])
+  @@index([branchId])
+  @@index([userId, branchId])
 }
 
 /// 회사 내 창고

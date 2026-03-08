@@ -1,6 +1,15 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { IsEmail, IsEnum, IsString, IsStrongPassword } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsStrongPassword,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'staff1@warehousehub.local' })
@@ -34,4 +43,25 @@ export class CreateUserDto {
   @ApiProperty({ enum: Role, example: Role.DELIVERY })
   @IsEnum(Role)
   role!: Role;
+
+  @ApiPropertyOptional({ example: 'SALES', description: '부서 코드' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  departmentCode?: string | null;
+
+  @ApiPropertyOptional({ example: 'uuid', description: '상위 관리자 User ID' })
+  @IsOptional()
+  @IsString()
+  @IsUUID()
+  supervisorId?: string | null;
+
+  @ApiPropertyOptional({
+    example: ['uuid1', 'uuid2'],
+    description: '담당 지사 Branch ID 배열',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  branchIds?: string[];
 }

@@ -152,11 +152,31 @@ export async function updateCompanyUserRole(
   await httpClient.patch(`/users/${userId}/role`, { role });
 }
 
+export type UpdateCompanyUserDepartmentPayload = {
+  departmentCode?: string | null;
+  supervisorId?: string | null;
+  branchIds?: string[];
+};
+
+export async function updateCompanyUserDepartment(
+  userId: string,
+  payload: UpdateCompanyUserDepartmentPayload,
+): Promise<CompanyUser> {
+  const res = await httpClient.patch<CompanyUser>(
+    `/users/${userId}/department`,
+    payload,
+  );
+  return res.data;
+}
+
 export type CreateCompanyUserPayload = {
   email: string;
   name: string;
   password: string;
   role: string;
+  departmentCode?: string | null;
+  supervisorId?: string | null;
+  branchIds?: string[];
 };
 
 export async function createCompanyUser(

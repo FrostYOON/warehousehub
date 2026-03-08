@@ -305,9 +305,13 @@ export class AuthService {
     const user = await this.users.findUserById(userId);
     if (!user || !user.isActive) throw new UnauthorizedException();
 
-    const company = await this.prisma.company.findUnique({
-      where: { id: user.companyId },
-    });
+    const [company, branchUsers] = await Promise.all([
+      this.prisma.company.findUnique({ where: { id: user.companyId } }),
+      this.prisma.branchUser.findMany({
+        where: { userId },
+        select: { branchId: true },
+      }),
+    ]);
 
     return {
       id: user.id,
@@ -316,6 +320,10 @@ export class AuthService {
       role: user.role,
       companyId: user.companyId,
       companyName: company?.name ?? null,
+      branchIds:
+        branchUsers.length > 0
+          ? branchUsers.map((bu) => bu.branchId)
+          : null,
       dateOfBirth: user.dateOfBirth?.toISOString().split('T')[0] ?? null,
       phone: user.phone ?? null,
       addressLine1: user.addressLine1 ?? null,

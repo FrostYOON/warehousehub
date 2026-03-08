@@ -11,6 +11,7 @@ import {
   deactivateCompanyUser,
   getCompanyUsers,
   getUserAuditLogs,
+  updateCompanyUserDepartment,
   updateCompanyUserRole,
 } from '@/features/auth/api/auth.api';
 import type { ListCompanyUsersParams } from '@/features/auth/api/auth.api';
@@ -25,6 +26,8 @@ import {
   PASSWORD_REQUIREMENT_TEXT,
   validatePassword,
 } from '@/shared/utils/validate-password';
+import { listBranches } from '@/features/branches/api/branches.api';
+import type { Branch } from '@/features/branches/model/types';
 
 const SORT_BY_OPTIONS: { value: 'name' | 'email' | 'createdAt' | 'updatedAt'; label: string }[] = [
   { value: 'createdAt', label: '가입일' },
@@ -72,6 +75,9 @@ export default function MembersPage() {
     name: '',
     password: '',
     role: 'DELIVERY' as UserRole,
+    departmentCode: '',
+    supervisorId: '',
+    branchIds: [] as string[],
   });
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -81,6 +87,14 @@ export default function MembersPage() {
   const [auditLogUser, setAuditLogUser] = useState<CompanyUser | null>(null);
   const [auditLogs, setAuditLogs] = useState<UserAuditLogItem[]>([]);
   const [auditLogLoading, setAuditLogLoading] = useState(false);
+  const [deptModalUser, setDeptModalUser] = useState<CompanyUser | null>(null);
+  const [deptForm, setDeptForm] = useState<{
+    departmentCode: string;
+    supervisorId: string;
+    branchIds: string[];
+  }>({ departmentCode: '', supervisorId: '', branchIds: [] });
+  const [deptSubmitting, setDeptSubmitting] = useState(false);
+  const [branches, setBranches] = useState<Branch[]>([]);
 
   const canSelectUser = (user: CompanyUser) =>
     user.id !== me?.id && user.role !== 'ADMIN';
@@ -92,6 +106,14 @@ export default function MembersPage() {
       router.replace('/');
     }
   }, [me, router]);
+
+  useEffect(() => {
+    if (me?.role === 'ADMIN') {
+      listBranches()
+        .then(setBranches)
+        .catch(() => {});
+    }
+  }, [me?.role]);
 
   // 필터/검색/정렬 변경 시 1페이지로
   useEffect(() => {
@@ -188,8 +210,19 @@ export default function MembersPage() {
         name: addForm.name.trim(),
         password: addForm.password,
         role: addForm.role,
+        departmentCode: addForm.departmentCode || undefined,
+        supervisorId: addForm.supervisorId || undefined,
+        branchIds: addForm.branchIds.length > 0 ? addForm.branchIds : undefined,
       });
-      setAddForm({ email: '', name: '', password: '', role: 'DELIVERY' });
+      setAddForm({
+        email: '',
+        name: '',
+        password: '',
+        role: 'DELIVERY',
+        departmentCode: '',
+        supervisorId: '',
+        branchIds: [],
+      });
       setIsAddModalOpen(false);
       setRefreshKey((k) => k + 1);
       showToast('멤버가 추가되었습니다.', 'success');
@@ -308,6 +341,58 @@ export default function MembersPage() {
       DEACTIVATED: '비활성화',
     };
     return m[action] ?? action;
+  }
+
+  function openDeptModal(user: CompanyUser) {
+    setDeptModalUser(user);
+    setDeptForm({
+      departmentCode: user.departmentCode ?? '',
+      supervisorId: user.supervisorId ?? '',
+      branchIds: user.branchIds ?? [],
+    });
+  }
+
+  async function handleDeptSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!deptModalUser || deptSubmitting) return;
+    setDeptSubmitting(true);
+    try {
+      const updated = await updateCompanyUserDepartment(deptModalUser.id, {
+        departmentCode: deptForm.departmentCode || null,
+        supervisorId: deptForm.supervisorId || null,
+        branchIds: deptForm.branchIds,
+      });
+      setUsers((prev) =>
+        prev.map((u) => (u.id === deptModalUser.id ? { ...u, ...updated } : u)),
+      );
+      setDeptModalUser(null);
+      showToast('부서·관리자·담당 지사 설정을 저장했습니다.', 'success');
+    } catch (err: unknown) {
+      showToast(
+        getErrorMessage(err, '설정 저장에 실패했습니다.'),
+        'error',
+      );
+    } finally {
+      setDeptSubmitting(false);
+    }
+  }
+
+  function toggleBranch(branchId: string) {
+    setDeptForm((f) => ({
+      ...f,
+      branchIds: f.branchIds.includes(branchId)
+        ? f.branchIds.filter((id) => id !== branchId)
+        : [...f.branchIds, branchId],
+    }));
+  }
+
+  function toggleAddBranch(branchId: string) {
+    setAddForm((f) => ({
+      ...f,
+      branchIds: f.branchIds.includes(branchId)
+        ? f.branchIds.filter((id) => id !== branchId)
+        : [...f.branchIds, branchId],
+    }));
   }
 
   async function handleRoleChange(user: CompanyUser, newRole: UserRole) {
@@ -436,7 +521,7 @@ export default function MembersPage() {
 
         {!loading && users.length > 0 && (
           <div className="table-wrapper">
-            <table className="data-table min-w-[480px]">
+            <table className="data-table min-w-[680px]">
               <thead>
                 <tr>
                   <th className="w-10">
@@ -455,6 +540,9 @@ export default function MembersPage() {
                   <th>이름</th>
                   <th>이메일</th>
                   <th>역할</th>
+                  <th>부서</th>
+                  <th>관리자</th>
+                  <th>담당 지사</th>
                   <th>상태</th>
                   <th>마지막 로그인</th>
                   <th>작업</th>
@@ -496,6 +584,17 @@ export default function MembersPage() {
                         ))}
                       </select>
                     </td>
+                    <td className="text-xs text-slate-600">
+                      {user.departmentCode ?? '-'}
+                    </td>
+                    <td className="text-xs text-slate-600">
+                      {user.supervisor?.name ?? '-'}
+                    </td>
+                    <td className="max-w-[120px] truncate text-xs text-slate-600">
+                      {user.branches?.length
+                        ? user.branches.map((b) => b.name).join(', ')
+                        : '전체'}
+                    </td>
                     <td>
                       <span
                         className={
@@ -535,6 +634,13 @@ export default function MembersPage() {
                           {actionId === user.id ? '처리 중...' : '활성화'}
                         </button>
                       )}
+                        <button
+                          type="button"
+                          onClick={() => openDeptModal(user)}
+                          className="h-8 rounded border border-slate-200 px-2 text-xs text-slate-600 hover:bg-slate-50"
+                        >
+                          부서/지사
+                        </button>
                         <button
                           type="button"
                           onClick={() => openAuditLog(user)}
@@ -660,6 +766,71 @@ export default function MembersPage() {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label htmlFor="add-dept" className="block text-sm font-medium text-slate-700">
+                    부서 코드 (선택)
+                  </label>
+                  <input
+                    id="add-dept"
+                    type="text"
+                    value={addForm.departmentCode}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, departmentCode: e.target.value }))
+                    }
+                    disabled={addSubmitting}
+                    className="form-input mt-1"
+                    placeholder="SALES, ACCOUNTING, WAREHOUSE, DELIVERY"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">
+                    상위 관리자 (선택)
+                  </label>
+                  <select
+                    value={addForm.supervisorId}
+                    onChange={(e) =>
+                      setAddForm((f) => ({ ...f, supervisorId: e.target.value }))
+                    }
+                    disabled={addSubmitting}
+                    className="form-select mt-1"
+                  >
+                    <option value="">없음</option>
+                    {users
+                      .filter((u) => u.id !== me?.id && u.isActive)
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.email})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">
+                    담당 지사 (선택, 비워두면 전체)
+                  </label>
+                  <div className="mt-1 max-h-32 overflow-y-auto rounded border border-slate-200 p-2">
+                    {branches.length === 0 ? (
+                      <p className="text-xs text-slate-500">지사가 없습니다.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {branches.map((b) => (
+                          <label key={b.id} className="flex cursor-pointer items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={addForm.branchIds.includes(b.id)}
+                              onChange={() => toggleAddBranch(b.id)}
+                              className="h-3.5 w-3.5 rounded border-slate-300"
+                            />
+                            <span className="text-sm">{b.name}</span>
+                            {b.code && (
+                              <span className="text-xs text-slate-400">({b.code})</span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
@@ -726,6 +897,103 @@ export default function MembersPage() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {deptModalUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+            <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+              <h3 className="text-base font-semibold text-slate-800">
+                부서·관리자·담당 지사 — {deptModalUser.name}
+              </h3>
+              <form onSubmit={handleDeptSubmit} className="mt-3 space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">
+                    부서 코드
+                  </label>
+                  <input
+                    type="text"
+                    value={deptForm.departmentCode}
+                    onChange={(e) =>
+                      setDeptForm((f) => ({ ...f, departmentCode: e.target.value }))
+                    }
+                    disabled={deptSubmitting}
+                    className="form-input mt-1"
+                    placeholder="SALES, ACCOUNTING, WAREHOUSE, DELIVERY"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">
+                    상위 관리자
+                  </label>
+                  <select
+                    value={deptForm.supervisorId}
+                    onChange={(e) =>
+                      setDeptForm((f) => ({ ...f, supervisorId: e.target.value }))
+                    }
+                    disabled={deptSubmitting}
+                    className="form-select mt-1"
+                  >
+                    <option value="">없음</option>
+                    {users
+                      .filter(
+                        (u) =>
+                          u.id !== deptModalUser.id &&
+                          u.isActive,
+                      )
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.email})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">
+                    담당 지사 (비워두면 전체)
+                  </label>
+                  <div className="mt-1 max-h-32 overflow-y-auto rounded border border-slate-200 p-2">
+                    {branches.length === 0 ? (
+                      <p className="text-xs text-slate-500">지사가 없습니다.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {branches.map((b) => (
+                          <label key={b.id} className="flex cursor-pointer items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={deptForm.branchIds.includes(b.id)}
+                              onChange={() => toggleBranch(b.id)}
+                              className="h-3.5 w-3.5 rounded border-slate-300"
+                            />
+                            <span className="text-sm">{b.name}</span>
+                            {b.code && (
+                              <span className="text-xs text-slate-400">({b.code})</span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeptModalUser(null)}
+                    disabled={deptSubmitting}
+                    className="h-9 rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-100 disabled:opacity-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={deptSubmitting}
+                    className="h-9 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {deptSubmitting ? '저장 중...' : '저장'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
