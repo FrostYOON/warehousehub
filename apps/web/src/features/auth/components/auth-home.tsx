@@ -155,7 +155,12 @@ export function AuthHome() {
 
   const todos = (summary?.todos ?? []).filter((todo) => todo.value > 0);
   const alerts = (summary?.alerts ?? []).filter((alert) => alert.value > 0);
-  const canSeeAlertsWidget = role === 'ADMIN' || role === 'WH_MANAGER' || role === 'DELIVERY';
+  const canSeeAlertsWidget =
+    role === 'ADMIN' ||
+    role === 'WH_MANAGER' ||
+    role === 'DELIVERY' ||
+    role === 'SALES' ||
+    role === 'ACCOUNTING';
   const canSeeAnalysisWidget =
     role === 'ADMIN' ||
     role === 'WH_MANAGER' ||
@@ -180,7 +185,11 @@ export function AuthHome() {
     URL.revokeObjectURL(url);
   };
 
-  const canSeeInventoryWidget = role === 'ADMIN' || role === 'WH_MANAGER';
+  const canSeeInventoryWidget =
+    role === 'ADMIN' ||
+    role === 'WH_MANAGER' ||
+    role === 'SALES' ||
+    role === 'ACCOUNTING';
   const inventoryInsights = summary?.inventoryInsights ?? {
     expirySoonCount: 0,
     shortageCount: 0,
