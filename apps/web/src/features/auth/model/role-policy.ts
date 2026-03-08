@@ -10,6 +10,11 @@ const TEMPERATURE_MONITOR_ROLES: ReadonlySet<UserRole> = new Set([
   'WH_MANAGER',
 ]);
 
+const TRANSFERS_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'WH_MANAGER',
+]);
+
 const RETURN_MANAGE_ROLES: ReadonlySet<UserRole> = new Set([
   'ADMIN',
   'WH_MANAGER',
@@ -31,6 +36,14 @@ const OUTBOUND_CANCEL_ROLES: ReadonlySet<UserRole> = new Set([
   'SALES',
 ]);
 
+/** 대시보드 접근: ADMIN, WH_MANAGER, SALES, ACCOUNTING (DELIVERY 제외) */
+const DASHBOARD_ALLOWED_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'WH_MANAGER',
+  'SALES',
+  'ACCOUNTING',
+]);
+
 export function canAccessInbound(role?: UserRole): boolean {
   if (!role) return false;
   return INBOUND_ALLOWED_ROLES.has(role);
@@ -42,9 +55,16 @@ export function canAccessTemperatureMonitor(role?: UserRole): boolean {
   return TEMPERATURE_MONITOR_ROLES.has(role);
 }
 
-/** 대시보드: ADMIN만 접근 */
+/** 창고 간 이동: ADMIN, WH_MANAGER */
+export function canAccessTransfers(role?: UserRole): boolean {
+  if (!role) return false;
+  return TRANSFERS_ROLES.has(role);
+}
+
+/** 대시보드: ADMIN, WH_MANAGER, SALES, ACCOUNTING (DELIVERY 제외) */
 export function canAccessDashboard(role?: UserRole): boolean {
-  return role === 'ADMIN';
+  if (!role) return false;
+  return DASHBOARD_ALLOWED_ROLES.has(role);
 }
 
 /** 회원 승인/관리: ADMIN만 */

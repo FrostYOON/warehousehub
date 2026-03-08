@@ -2,9 +2,11 @@
 
 import { AuthSessionProvider, useAuthSessionContext } from '@/features/auth/context/auth-session-context';
 import {
+  canAccessDashboard,
   canAccessInbound,
   canAccessMembers,
   canAccessTemperatureMonitor,
+  canAccessTransfers,
 } from '@/features/auth/model/role-policy';
 import { LOGIN_PATH } from '@/features/auth/model/constants';
 import { buildDashboardMenus, DashboardShell } from '@/features/dashboard';
@@ -12,14 +14,18 @@ import { DashboardProviders } from '@/features/dashboard/components/dashboard-pr
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
-const ADMIN_ONLY_PATHS = ['/', '/approvals', '/members'];
+const DASHBOARD_PATH = '/';
+const MEMBERS_ONLY_PATHS = ['/approvals', '/members'];
 const INBOUND_PATH = '/inbound';
 const ITEMS_PATH = '/items';
 const TEMPERATURE_MONITOR_PATH = '/temperature-monitor';
 const STOCKTAKING_PATH = '/stocktaking';
+const TRANSFERS_PATH = '/transfers';
 
 function getDefaultRedirectPath(role?: string): string {
-  if (role === 'ADMIN') return '/';
+  if (canAccessDashboard(role as Parameters<typeof canAccessDashboard>[0])) {
+    return '/';
+  }
   return '/stocks';
 }
 
@@ -37,8 +43,18 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
 
     const role = me.role;
 
-    if (ADMIN_ONLY_PATHS.includes(pathname) && !canAccessMembers(role)) {
+    if (pathname === DASHBOARD_PATH && !canAccessDashboard(role)) {
       router.replace(getDefaultRedirectPath(role));
+      return;
+    }
+
+    if (MEMBERS_ONLY_PATHS.includes(pathname) && !canAccessMembers(role)) {
+      router.replace(getDefaultRedirectPath(role));
+      return;
+    }
+
+    if (pathname === TRANSFERS_PATH && !canAccessTransfers(role)) {
+      router.replace('/stocks');
       return;
     }
 
