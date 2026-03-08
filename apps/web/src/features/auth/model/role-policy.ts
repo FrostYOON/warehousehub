@@ -5,6 +5,11 @@ const INBOUND_ALLOWED_ROLES: ReadonlySet<UserRole> = new Set([
   'WH_MANAGER',
 ]);
 
+const BRANCHES_ROLES: ReadonlySet<UserRole> = new Set([
+  'ADMIN',
+  'WH_MANAGER',
+]);
+
 const TEMPERATURE_MONITOR_ROLES: ReadonlySet<UserRole> = new Set([
   'ADMIN',
   'WH_MANAGER',
@@ -47,6 +52,11 @@ const DASHBOARD_ALLOWED_ROLES: ReadonlySet<UserRole> = new Set([
 export function canAccessInbound(role?: UserRole): boolean {
   if (!role) return false;
   return INBOUND_ALLOWED_ROLES.has(role);
+}
+
+export function canAccessBranches(role?: UserRole): boolean {
+  if (!role) return false;
+  return BRANCHES_ROLES.has(role);
 }
 
 /** 온도 모니터: ADMIN, WH_MANAGER만 접근·기입 */

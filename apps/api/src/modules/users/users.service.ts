@@ -48,22 +48,34 @@ export class UsersService {
     const company = await this.prisma.company.create({
       data: { name: params.companyName },
     });
+
+    const defaultBranch = await this.prisma.branch.create({
+      data: {
+        companyId: company.id,
+        name: params.companyName + ' (본사)',
+        code: 'DEFAULT',
+      },
+    });
+
     await this.prisma.warehouse.createMany({
       data: [
         {
           companyId: company.id,
+          branchId: defaultBranch.id,
           type: StorageType.DRY,
           name: 'DRY',
           region: 'default',
         },
         {
           companyId: company.id,
+          branchId: defaultBranch.id,
           type: StorageType.COOL,
           name: 'COOL',
           region: 'default',
         },
         {
           companyId: company.id,
+          branchId: defaultBranch.id,
           type: StorageType.FRZ,
           name: 'FRZ',
           region: 'default',

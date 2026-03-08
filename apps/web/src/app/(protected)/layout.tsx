@@ -2,6 +2,7 @@
 
 import { AuthSessionProvider, useAuthSessionContext } from '@/features/auth/context/auth-session-context';
 import {
+  canAccessBranches,
   canAccessDashboard,
   canAccessInbound,
   canAccessMembers,
@@ -23,6 +24,7 @@ const ITEMS_PATH = '/items';
 const TEMPERATURE_MONITOR_PATH = '/temperature-monitor';
 const STOCKTAKING_PATH = '/stocktaking';
 const TRANSFERS_PATH = '/transfers';
+const BRANCHES_PATH = '/branches';
 const STOCKS_PATH = '/stocks';
 const STOCKS_MANAGE_PATH = '/stocks/manage';
 
@@ -89,6 +91,11 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
     }
 
     if (pathname === STOCKS_MANAGE_PATH && !canEditStock(role)) {
+      router.replace('/stocks');
+      return;
+    }
+
+    if (pathname === BRANCHES_PATH && !canAccessBranches(role)) {
       router.replace('/stocks');
       return;
     }

@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UsersModule } from './modules/users/users.module';
+import { BranchesModule } from './modules/branches/branches.module';
 import { WarehousesModule } from './modules/warehouses/warehouses.module';
 import { InboundModule } from './modules/inbound/inbound.module';
 import { StocksModule } from './modules/stocks/stocks.module';
@@ -39,6 +40,7 @@ import { StocktakingModule } from './modules/stocktaking/stocktaking.module';
     PrismaModule,
     AuthModule,
     UsersModule,
+    BranchesModule,
     WarehousesModule,
     InboundModule,
     StocksModule,

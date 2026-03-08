@@ -1,4 +1,5 @@
 import {
+  canAccessBranches,
   canAccessCustomers,
   canAccessDashboard,
   canAccessInbound,
@@ -54,6 +55,14 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
       label: '창고 간 이동',
       description: '지사별 창고 간 재고 이동',
       href: '/transfers',
+    });
+  }
+
+  if (canAccessBranches(role)) {
+    menus.push({
+      label: '지사',
+      description: '지사·창고 계층 관리',
+      href: '/branches',
     });
   }
 
