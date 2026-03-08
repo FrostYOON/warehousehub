@@ -128,7 +128,37 @@ git push origin --delete feature/<기능명>
 
 ---
 
-## 8. 체크리스트
+## 8. 미merge feature 브랜치 정리 가이드 (2026-03 기준)
+
+Phase 1~5 완료·main merge 후 남아 있는 feature 브랜치 상태:
+
+| 브랜치 | main 대비 | 제안 |
+|--------|-----------|------|
+| `feature/branch-domain` | main이 16커밋 앞섬 | main에 이미 Branch 도메인 반영됨 → **삭제 권장** |
+| `feature/customer-schema-improvement` | main이 29커밋 앞섬 | main에 고객 스키마 반영 여부 확인 후 **삭제 또는 리베이스** |
+| `feature/customers-test-coverage` | main이 26커밋 앞섬 | 테스트 커버리지 보강용. main rebase 후 cherry-pick 또는 새 브랜치로 재작업 |
+| `feature/devices-cleanup` | main이 29커밋 앞섬, 3커밋 뒤 | **삭제 권장** (오래된 base, Phase 1~5 코드가 제거된 diff) |
+| `feature/profile-image-upload` | main이 29커밋 앞섬 | 프로필 이미지 revert 포함 → **삭제 권장** |
+| `feature/transfers-ui` | main이 26커밋 앞섬 | main에 이미 Transfers UI 반영됨 → **삭제 권장** |
+| `feature/user-profile-fields` | main이 31커밋 앞섬 | main에 profile 필드 반영 여부 확인 후 **삭제 또는 리베이스** |
+| `feature/users-test-coverage` | main이 28커밋 앞섬 | 테스트 커버리지 보강용. main rebase 후 재작업 |
+
+**정리 명령 예시**
+
+```bash
+# main 최신화 후, main에 이미 반영된 브랜치 로컬 삭제
+git checkout main && git pull origin main
+
+# branch-domain, transfers-ui 등 main 반영 완료된 브랜치 삭제
+git branch -D feature/branch-domain feature/transfers-ui feature/profile-image-upload feature/devices-cleanup
+
+# 원격 삭제 (해당 브랜치가 원격에 있는 경우)
+git push origin --delete feature/branch-domain  # 등
+```
+
+---
+
+## 9. 체크리스트
 
 **feature 시작 전**
 
@@ -152,3 +182,4 @@ git push origin --delete feature/<기능명>
 ---
 
 *문서 작성일: 2026-03-07*
+*갱신일: 2026-03-08 (미merge feature 브랜치 정리 가이드 추가)*

@@ -2,6 +2,8 @@
 
 > PM 피드백 반영. 프로젝트의 현재 기능, 추가·변경·제거 요구사항, 우선순위, 구현 방향을 정리한 문서입니다.
 
+**구현 상태**: Phase 1~5 로드맵 완료 (2026-03 기준)
+
 ---
 
 ## 1. 프로젝트 개요
@@ -65,10 +67,10 @@
 
 | 구분 | 상세 |
 |------|------|
-| **API 엔드포인트** | `GET /users`, `POST /users`, `PATCH /users/bulk-deactivate`, `PATCH /users/bulk-role`, `PATCH /users/:id/role`, `GET /users/:id/audit-logs`, `PATCH /users/:id/deactivate`, `PATCH /users/:id/activate`, `DELETE /users/:id` |
+| **API 엔드포인트** | `GET /users`, `POST /users`, `PATCH /users/bulk-deactivate`, `PATCH /users/bulk-role`, `PATCH /users/:id/role`, `PATCH /users/:id/department`, `GET /users/:id/audit-logs`, `PATCH /users/:id/deactivate`, `PATCH /users/:id/activate`, `DELETE /users/:id` |
 | **웹 페이지** | 회원 승인 (`/approvals`), 회원 관리 (`/members`) |
 | **역할별 접근** | 모든 엔드포인트: ADMIN만 |
-| **PM 피드백** | 담당부서별 관리자 체계 도입 시 User 모델 확장 예정 (부서, 상위 관리자) |
+| **담당부서/지사** | departmentCode, supervisorId, branchIds(담당 지사) 설정 UI 포함 |
 
 ---
 
@@ -77,8 +79,8 @@
 | 구분 | 상세 |
 |------|------|
 | **API 엔드포인트** | `GET /dashboard/summary` |
-| **웹 페이지** | 대시보드 홈 (`/`) — **현재 ADMIN만** |
-| **역할별 접근** | **변경 예정**: ADMIN, WH_MANAGER, SALES, ACCOUNTING (DELIVERY 제외) |
+| **웹 페이지** | 대시보드 홈 (`/`) |
+| **역할별 접근** | ✓ ADMIN, WH_MANAGER, SALES, ACCOUNTING (DELIVERY 제외) |
 | **기능** | KPI, 알림·TODO 위젯, 출고 분석, 인벤토리 인사이트 |
 
 ---
@@ -88,9 +90,8 @@
 | 구분 | 상세 |
 |------|------|
 | **API 엔드포인트** | `GET /stocks`, `GET /stocks/export`, `GET /stocks/items`, `GET /stocks/analytics/:itemId`, `PATCH /stocks/:stockId` |
-| **웹 페이지** | 재고 현황 (`/stocks`) — 조회·수정 통합 |
-| **역할별 접근** | 조회: ADMIN, WH_MANAGER, DELIVERY, ACCOUNTING, SALES / 수량 조정: ADMIN만 |
-| **PM 피드백** | **재고 조회** (view only)와 **재고 관리** (수정) 페이지 분리 예정 |
+| **웹 페이지** | 재고 조회 (`/stocks`), 재고 관리 (`/stocks/manage`) — 페이지 분리 완료 |
+| **역할별 접근** | 조회: ADMIN, WH_MANAGER, DELIVERY, ACCOUNTING, SALES / 수량 조정: ADMIN, WH_MANAGER |
 
 ---
 
@@ -101,7 +102,15 @@
 | **API 엔드포인트** | `POST /inbound/uploads`, `GET /inbound/uploads`, `GET /inbound/uploads/:id`, `POST /inbound/uploads/:id/confirm`, `POST /inbound/uploads/:id/cancel` |
 | **웹 페이지** | 입고 (`/inbound`) |
 | **역할별 접근** | ADMIN, WH_MANAGER만 |
-| **PM 피드백** | **입고 예정(ASN)** 흐름 도입 — 입고 신청 → ASN → 출고(원본 지사) → 입고(대상 지사) |
+
+### 3.5.1 입고 예정 (ASN) ✓ 구현 완료
+
+| 구분 | 상세 |
+|------|------|
+| **API 엔드포인트** | `POST /asn`, `GET /asn`, `GET /asn/:id`, `PATCH /asn/:id/ship`, `PATCH /asn/:id/receive` 등 |
+| **웹 페이지** | 입고 예정 목록 (`/asn`), 입고 예정 등록 (`/asn/new`) |
+| **역할별 접근** | ADMIN, WH_MANAGER |
+| **기능** | 입고 신청 → ASN 상태 → 출고(원본 지사) → 입고(대상 지사) 흐름 구현 |
 
 ---
 
@@ -122,27 +131,28 @@
 |------|------|
 | **API 엔드포인트** | `POST /returns`, `GET /returns`, `GET /returns/:id`, `PATCH /returns/:id`, `POST /returns/:id/decide`, `POST /returns/:id/process` 등 |
 | **웹 페이지** | 반품 (`/returns`) |
-| **역할별 접근** | **변경 예정**: 반품 조회 — **전체 역할** 허용 |
-| **PM 피드백** | ACCOUNTING 반품 조회 추가 반영 |
+| **역할별 접근** | 반품 조회: 전체 역할 / 결정·처리: ADMIN, WH_MANAGER |
 
 ---
 
-### 3.8 품목·고객사·온도 모니터
+### 3.8 품목·고객사·온도 모니터·지사·비용·재고예측
 
-| 모듈 | 설명 | PM 피드백 |
-|------|------|-----------|
-| **품목 (Items)** | 품목 마스터 | — |
-| **고객사 (Customers)** | 거래처 관리 | — |
-| **온도 모니터** | COOL/FRZ 온도 기입, 날씨 API | — |
+| 모듈 | 설명 | 역할별 접근 |
+|------|------|--------------|
+| **품목 (Items)** | 품목 마스터 `/items` | ADMIN, WH_MANAGER |
+| **고객사 (Customers)** | 거래처 관리 `/customers` | 전체 역할 |
+| **온도 모니터** | COOL/FRZ 온도 기입, 날씨 API `/temperature-monitor` | ADMIN, WH_MANAGER |
+| **지사 (Branches)** | 지사·창고 계층 관리 `/branches` | ADMIN, WH_MANAGER |
+| **비용/원가 (Cost)** | 원가 관리·리포트 `/cost` | ADMIN, WH_MANAGER, ACCOUNTING |
+| **재고 예측** | 수요 예측·발주 제안 `/inventory-forecast` | ADMIN, WH_MANAGER, ACCOUNTING, SALES |
 
 ---
 
-### 3.9 재고 실사 (Stocktaking) — 제거 예정
+### 3.9 재고 실사 (Stocktaking) — 제거 완료
 
 | 구분 | 상세 |
 |------|------|
-| **현재** | API·페이지 존재, 계획→라인→실제 수량→확정 흐름 |
-| **PM 피드백** | **제거** (기능·메뉴 비활성화 또는 삭제) |
+| **상태** | 메뉴·페이지 비활성화 완료. API deprecated 처리 |
 
 ---
 
@@ -151,40 +161,41 @@
 | 구분 | 상세 |
 |------|------|
 | **API** | `POST /transfers`, `GET /transfers`, `GET /transfers/:id`, `PATCH /transfers/:id/confirm`, `PATCH /transfers/:id/cancel` |
-| **웹 페이지** | **없음** (메뉴 미노출) |
-| **PM 피드백** | 창고 간 이동은 **지사별 창고 간** 이동 (DRY→COOL 같은 저장타입 이동 아님). 예: 토론토 창고 → 몬트리올 창고. 토론토 출고 → 몬트리올 입고 형태 |
+| **웹 페이지** | 창고 간 이동 (`/transfers`) — 메뉴 노출 완료 |
+| **역할별 접근** | ADMIN, WH_MANAGER |
+| **기능** | 지사별 창고 간 이동 (토론토→몬트리올 등) 구현 |
 
 ---
 
 ## 4. 추가·변경 기능 정리 (우선순위)
 
-### 4.1 높은 우선순위
+### 4.1 높은 우선순위 (Phase 1~2 완료 항목)
 
-| 기능 | 내용 | 구현 방향 |
-|------|------|-----------|
-| **지사(Branch) 도메인** | 회사 내 지사(브랜치) 개념 도입. 지사별 창고, 지사 간 이동 | `Company → Branch → Warehouse` 계층. Warehouse에 `branchId` 추가 |
-| **입고 예정(ASN)** | 입고 신청 → ASN 상태 → 출고(원본 지사) → 입고(대상 지사) | ASN 모델, 예정일·공급처·품목 관리, Transfer·Inbound 연계 |
-| **재고 조회/관리 분리** | 조회 전용 vs 수정 전용 페이지 | `/stocks` (조회), `/stocks/manage` 또는 `/inventory` (수정, ADMIN·WH_MANAGER) |
-| **유통기한 임박 알림** | 임박 기준 설정, 알림 규칙 | Lot 유통기한 기반 알림, 대시보드·이메일 |
-| **역할/접근 정비** | 대시보드 DELIVERY 제외, 반품 조회 전체, Transfers 메뉴 노출 | role-policy, menu 정리 |
-| **재고 실사 제거** | 기능·메뉴 제거 | Stocktaking 메뉴·페이지 비활성화, API deprecated 또는 제거 |
+| 기능 | 상태 | 비고 |
+|------|------|------|
+| **지사(Branch) 도메인** | ✓ 완료 | Company → Branch → Warehouse 계층 |
+| **입고 예정(ASN)** | ✓ 완료 | ASN 모델·API·UI 구현 |
+| **재고 조회/관리 분리** | ✓ 완료 | `/stocks`, `/stocks/manage` |
+| **유통기한 임박 알림** | 미구현 | Lot 기반 알림, 대시보드·이메일 |
+| **역할/접근 정비** | ✓ 완료 | role-policy, menu 정리 |
+| **재고 실사 제거** | ✓ 완료 | 메뉴·페이지 비활성화 |
 
-### 4.2 중간 우선순위
+### 4.2 중간 우선순위 (Phase 3 완료·미완료)
 
-| 기능 | 내용 | 구현 방향 |
-|------|------|-----------|
-| **주문서/출고서 출력** | PDF·프린트 | PDF 생성 라이브러리, 프린트 옵션 UI |
-| **재고 예측/발주 제안** | 과거 출고 기반 예측 | 출고 이력 기반 알고리즘, 발주 제안 UI |
-| **비용/원가 관리** | 품목 원가, 입고 시 원가 기록 | Item 원가 필드, Inbound 시 원가 기록, 리포트 |
+| 기능 | 상태 | 비고 |
+|------|------|------|
+| **주문서/출고서 출력** | 미구현 | PDF·프린트 옵션 UI |
+| **재고 예측/발주 제안** | ✓ 완료 | `/inventory-forecast` |
+| **비용/원가 관리** | ✓ 완료 | `/cost` |
 
 ### 4.3 낮은 우선순위
 
 | 기능 | 내용 |
 |------|------|
-| 멀티테넌시 고급 설정 | 커스텀 로고, 브랜드 색상 |
-| 감사 로그 확장 | 주요 변경 이력 검색·export |
-| Lot별 이력 상세 페이지 | `/traceability/lot/:lotId` 전용 페이지 |
-| 대시보드 커스터마이징 | 위젯 순서·표시 항목 저장 |
+| 멀티테넌시 고급 설정 | ✓ 완료 | `/settings/company` 로고·브랜드 색상 |
+| 감사 로그 확장 | ✓ 완료 | `/audit-logs` 검색·엑셀 export |
+| Lot별 이력 상세 페이지 | ✓ 완료 | `/traceability/lot/:lotId` |
+| 대시보드 커스터마이징 | ✓ 완료 | 위젯 순서·표시 저장 (UserDashboardPrefs) |
 
 ### 4.4 보류/제외
 
@@ -212,7 +223,19 @@
 ## 6. 관련 문서
 
 - `docs/REQUIREMENTS_REFINED.md` — 지사 구조, 입고 예정 흐름, 역할 체계, 담당부서/관리자, 스키마 영향도, Phase별 구현 로드맵
+- `docs/GIT_WORKFLOW.md` — feature merge 전략
+
+---
+
+## 7. 남은 작업 (추후 검토)
+
+| 항목 | 설명 |
+|------|------|
+| **담당 지사 API 필터 연동** | `UserBranchAccessService.getUserBranchIds()`는 구현됐으나, Stocks/ASN/Branches 등 API에서 branchIds로 데이터 필터링 미적용 |
+| **유통기한 임박 알림** | Lot 유통기한 기반 알림 미구현 |
+| **주문서/출고서 PDF** | PDF 생성·프린트 미구현 |
 
 ---
 
 *문서 작성일: 2026-03-07 (PM 피드백 반영)*
+*갱신일: 2026-03-08 (Phase 1~5 반영)*
