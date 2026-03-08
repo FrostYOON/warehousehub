@@ -499,18 +499,26 @@ export default function StocksPage() {
                         ) : null}
                       </td>
                       <td className="px-4 py-3">
-                        <ActionButton
-                          onClick={() =>
-                            setLotHistoryTarget({
-                              lotId: row.lot.id,
-                              lotLabel: `${row.lot.item.itemCode} · ${row.lot.item.itemName}`,
-                            })
-                          }
-                          size="sm"
-                          variant="secondary"
-                        >
-                          이력
-                        </ActionButton>
+                        <div className="flex gap-1">
+                          <ActionButton
+                            onClick={() =>
+                              setLotHistoryTarget({
+                                lotId: row.lot.id,
+                                lotLabel: `${row.lot.item.itemCode} · ${row.lot.item.itemName}`,
+                              })
+                            }
+                            size="sm"
+                            variant="secondary"
+                          >
+                            이력
+                          </ActionButton>
+                          <Link
+                            href={`/traceability/lot/${row.lot.id}`}
+                            className="inline-flex items-center rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            상세
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );

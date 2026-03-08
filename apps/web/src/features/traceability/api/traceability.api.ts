@@ -37,6 +37,14 @@ export type LotHistoryTransferEntry = {
   toWarehouse: { id: string; name: string; type: string; region: string };
 };
 
+export type LotStockSummaryEntry = {
+  warehouseId: string;
+  warehouse: { id: string; name: string; type: string; region: string };
+  onHand: number;
+  reserved: number;
+  available: number;
+};
+
 export type LotHistoryResponse = {
   lot: {
     id: string;
@@ -45,6 +53,7 @@ export type LotHistoryResponse = {
     expiryDate: string | null;
     createdAt: string;
   };
+  stockSummary?: LotStockSummaryEntry[];
   inventoryHistory: LotHistoryInventoryEntry[];
   pickHistory: LotHistoryPickEntry[];
   transferHistory: LotHistoryTransferEntry[];

@@ -32,7 +32,7 @@ export class TraceabilityService {
     });
     if (!lot) throw new NotFoundException('Lot not found');
 
-    const [inventoryTxLines, pickAllocations, transferLines] = await Promise.all([
+    const [inventoryTxLines, pickAllocations, transferLines, stocks] = await Promise.all([
       this.prisma.inventoryTxLine.findMany({
         where: { lotId },
         include: {
@@ -103,6 +103,15 @@ export class TraceabilityService {
         },
         orderBy: { createdAt: 'desc' },
       }),
+      this.prisma.stock.findMany({
+        where: { lotId, companyId },
+        include: {
+          warehouse: {
+            select: { id: true, name: true, type: true, region: true },
+          },
+        },
+        orderBy: { warehouse: { name: 'asc' } },
+      }),
     ]);
 
     const inventoryHistory = inventoryTxLines.map((line) => ({
@@ -142,6 +151,14 @@ export class TraceabilityService {
       toWarehouse: tl.transfer.toWarehouse,
     }));
 
+    const stockSummary = stocks.map((s) => ({
+      warehouseId: s.warehouseId,
+      warehouse: s.warehouse,
+      onHand: asNumber(s.onHand),
+      reserved: asNumber(s.reserved),
+      available: asNumber(s.onHand) - asNumber(s.reserved),
+    }));
+
     return {
       lot: {
         id: lot.id,
@@ -150,6 +167,7 @@ export class TraceabilityService {
         expiryDate: lot.expiryDate?.toISOString().slice(0, 10) ?? null,
         createdAt: lot.createdAt.toISOString(),
       },
+      stockSummary,
       inventoryHistory,
       pickHistory,
       transferHistory,

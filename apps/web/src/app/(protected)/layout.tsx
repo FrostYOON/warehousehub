@@ -21,7 +21,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 const DASHBOARD_PATH = '/';
-const MEMBERS_ONLY_PATHS = ['/approvals', '/members'];
+const MEMBERS_ONLY_PATHS = ['/approvals', '/members', '/audit-logs'];
 const INBOUND_PATH = '/inbound';
 const ITEMS_PATH = '/items';
 const TEMPERATURE_MONITOR_PATH = '/temperature-monitor';
@@ -31,6 +31,7 @@ const BRANCHES_PATH = '/branches';
 const ASN_PATH = '/asn';
 const STOCKS_PATH = '/stocks';
 const STOCKS_MANAGE_PATH = '/stocks/manage';
+const TRACEABILITY_LOT_PREFIX = '/traceability/lot/';
 const COST_PATH = '/cost';
 const INVENTORY_FORECAST_PATH = '/inventory-forecast';
 
@@ -97,6 +98,11 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
     }
 
     if (pathname === STOCKS_MANAGE_PATH && !canEditStock(role)) {
+      router.replace('/stocks');
+      return;
+    }
+
+    if (pathname.startsWith(TRACEABILITY_LOT_PREFIX) && !canViewStock(role)) {
       router.replace('/stocks');
       return;
     }

@@ -85,6 +85,12 @@ export function LotHistoryModal({ lotId, lotLabel, onClose }: LotHistoryModalPro
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <h2 className="text-lg font-semibold text-slate-800">Lot 이력 · {lotLabel}</h2>
           <div className="flex items-center gap-2">
+            <Link
+              href={`/traceability/lot/${lotId}`}
+              className="inline-flex items-center rounded border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              상세 페이지
+            </Link>
             <ActionButton
               onClick={() => void handleExportExcel()}
               variant="secondary"

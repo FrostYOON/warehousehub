@@ -10,19 +10,21 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
+import type { Request, Response } from 'express';
 
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import type { Request } from 'express';
 
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ListUsersQueryDto } from './dto/list-users-query.dto';
+import { ListAuditLogsQueryDto } from './dto/list-audit-logs-query.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UpdateUserDepartmentDto } from './dto/update-user-department.dto';
 import { BulkDeactivateDto } from './dto/bulk-deactivate.dto';
@@ -59,6 +61,50 @@ export class UsersController {
       search: query.search,
       sortBy: query.sortBy,
       sortOrder: query.sortOrder,
+    });
+  }
+
+  @Get('audit-logs/export')
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  async exportAuditLogs(@Req() req: Request, @Res() res: Response, @Query() query: ListAuditLogsQueryDto) {
+    const { companyId } = req.user!;
+    const file = await this.users.exportCompanyAuditLogs(companyId, {
+      action: query.action,
+      userId: query.userId,
+      actorUserId: query.actorUserId,
+      from: query.from,
+      to: query.to,
+    });
+    const fileName = `audit-logs-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(file);
+  }
+
+  @Get('audit-logs')
+  @Header('Cache-Control', 'no-store')
+  @ApiOkResponse({
+    schema: {
+      example: {
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 20,
+      },
+    },
+  })
+  listAuditLogs(@Req() req: Request, @Query() query: ListAuditLogsQueryDto) {
+    const { companyId } = req.user!;
+    return this.users.listCompanyAuditLogs(companyId, {
+      action: query.action,
+      userId: query.userId,
+      actorUserId: query.actorUserId,
+      from: query.from,
+      to: query.to,
+      page: query.page,
+      limit: query.limit,
     });
   }
 
