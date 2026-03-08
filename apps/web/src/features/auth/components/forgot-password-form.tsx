@@ -63,19 +63,17 @@ export function ForgotPasswordForm() {
 
   if (sent) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6">
-        <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <h1 className="text-center text-xl font-semibold sm:text-2xl">
-            비밀번호 찾기
-          </h1>
-          <p className="text-center text-sm text-slate-600">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8 sm:px-6">
+        <div className="modal-form-card max-w-md space-y-4">
+          <h1 className="page-title text-center text-xl sm:text-2xl">비밀번호 찾기</h1>
+          <p className="page-description text-center">
             입력하신 이메일 주소로 비밀번호 재설정 링크를 발송했습니다.
             <br />
             (개발 환경에서는 콘솔 로그를 확인해주세요)
           </p>
           <Link
             href={LOGIN_PATH}
-            className="block h-11 w-full rounded-lg bg-slate-900 px-3 text-center text-sm font-medium leading-[2.75rem] text-white transition hover:bg-slate-800"
+            className="btn-primary flex h-11 w-full items-center justify-center"
           >
             로그인으로 돌아가기
           </Link>
@@ -85,27 +83,23 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8 sm:px-6">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+        className="modal-form-card max-w-md space-y-4"
       >
-        <h1 className="text-center text-xl font-semibold sm:text-2xl">
-          비밀번호 찾기
-        </h1>
-        <p className="text-center text-sm text-slate-600">
+        <h1 className="page-title text-center text-xl sm:text-2xl">비밀번호 찾기</h1>
+        <p className="page-description text-center">
           가입 시 사용한 회사와 이메일을 입력하면 재설정 링크를 발송합니다.
         </p>
 
         <div className="space-y-1">
-          <label htmlFor="forgot-company" className="text-sm font-medium text-slate-700">
-            회사
-          </label>
+          <label htmlFor="forgot-company" className="form-label">회사</label>
           <select
             id="forgot-company"
             aria-label="비밀번호 재설정을 요청할 회사 선택"
             aria-busy={companiesLoading}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-select form-select-lg w-full"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
             disabled={submitting || companiesLoading || companies.length === 0}
@@ -125,15 +119,13 @@ export function ForgotPasswordForm() {
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="forgot-email" className="text-sm font-medium text-slate-700">
-            이메일
-          </label>
+          <label htmlFor="forgot-email" className="form-label">이메일</label>
           <input
             id="forgot-email"
             type="email"
             aria-label="가입 시 사용한 이메일"
             aria-busy={submitting}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-input-lg"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={submitting}
@@ -147,7 +139,7 @@ export function ForgotPasswordForm() {
           disabled={submitting || companiesLoading || companies.length === 0}
           aria-busy={submitting}
           aria-disabled={submitting || companiesLoading || companies.length === 0}
-          className="h-11 w-full rounded-lg bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+          className="btn-primary h-11 w-full"
         >
           {submitting ? '발송 중...' : '재설정 메일 발송'}
         </button>

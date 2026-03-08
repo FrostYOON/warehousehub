@@ -35,18 +35,21 @@ export default function TransfersPage() {
   }, [load]);
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-semibold text-slate-800">창고 간 이동</h1>
+    <section className="page-section">
+      <h2 className="page-title">창고 간 이동</h2>
+      <p className="page-description">창고 간 재고 이동 내역을 조회합니다.</p>
+
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">상태</span>
+          <label htmlFor="transfers-status" className="form-label !mb-0">상태</label>
           <select
+            id="transfers-status"
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter((e.target.value || '') as TransferStatus | '');
               setPage(1);
             }}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-300"
+            className="form-select h-9 w-auto min-w-[100px]"
           >
             <option value="">전체</option>
             <option value="PENDING">대기</option>
@@ -64,34 +67,34 @@ export default function TransfersPage() {
           />
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-8 text-center text-slate-500">
-          창고 간 이동 내역이 없습니다.
+        <div className="empty-state mt-4">
+          <p className="empty-state-text">창고 간 이동 내역이 없습니다.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead className="bg-slate-50">
+        <div className="table-wrapper mt-4">
+          <table className="data-table min-w-[600px]">
+            <thead>
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
                   출발 창고
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
                   도착 창고
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
                   품목 수
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
                   상태
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-600">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">
                   등록일
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody>
               {items.map((t) => (
-                <tr key={t.id} className="bg-white hover:bg-slate-50">
+                <tr key={t.id}>
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-800">
                     {t.fromWarehouse.name}
                   </td>
@@ -116,7 +119,7 @@ export default function TransfersPage() {
       )}
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-slate-600">
+        <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
           <span>
             총 {total}건 중 {(page - 1) * 20 + 1}–
             {Math.min(page * 20, total)}건
@@ -126,7 +129,7 @@ export default function TransfersPage() {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded border border-slate-300 px-3 py-1 disabled:opacity-50"
+              className="btn-secondary !h-8 px-3 py-1 text-sm"
             >
               이전
             </button>
@@ -134,13 +137,13 @@ export default function TransfersPage() {
               type="button"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="rounded border border-slate-300 px-3 py-1 disabled:opacity-50"
+              className="btn-secondary !h-8 px-3 py-1 text-sm"
             >
               다음
             </button>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

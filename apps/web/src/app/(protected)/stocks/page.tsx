@@ -526,12 +526,12 @@ export default function StocksPage() {
             </tbody>
           </table>
           {!loading && displayedRows.length === 0 && (
-            <div className="mt-4 flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 px-6 py-8 text-center">
-              <p className="text-sm text-slate-600">조건에 맞는 재고가 없습니다.</p>
+            <div className="empty-state mt-4">
+              <p className="empty-state-text">조건에 맞는 재고가 없습니다.</p>
               {canAccessInbound(me?.role) && (
                 <Link
                   href="/inbound"
-                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                  className="btn-primary mt-2"
                 >
                   입고 진행하기
                 </Link>

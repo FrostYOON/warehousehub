@@ -486,9 +486,9 @@ export default function TemperatureMonitorPage() {
         {logsLoading ? (
           <p className="text-sm text-slate-500">불러오는 중...</p>
         ) : !logsData?.items?.length ? (
-          <p className="text-sm text-slate-500">기록이 없습니다.</p>
+          <p className="empty-state-text">기록이 없습니다.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-wrapper">
             <table className="data-table min-w-[600px]">
               <thead>
                 <tr>

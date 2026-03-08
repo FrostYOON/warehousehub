@@ -234,7 +234,7 @@ export function AuthHome() {
               type="button"
               onClick={() => void refresh(true)}
               disabled={loading}
-              className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-secondary !h-8 px-2 py-1 text-xs"
             >
               {loading ? '갱신 중...' : '수동 새로고침'}
             </button>
@@ -249,7 +249,7 @@ export function AuthHome() {
               key={id}
               type="button"
               onClick={() => toggleWidgetVisibility(id)}
-              className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-100"
+              className="btn-secondary !h-7 px-2.5 py-1 text-xs"
             >
               + {WIDGET_LABELS[id] ?? id}
             </button>
