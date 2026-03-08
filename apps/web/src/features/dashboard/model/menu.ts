@@ -1,4 +1,5 @@
 import {
+  canAccessAsn,
   canAccessBranches,
   canAccessCustomers,
   canAccessDashboard,
@@ -47,6 +48,14 @@ export function buildDashboardMenus(role?: UserRole): DashboardMenu[] {
       label: '품목',
       description: '품목 마스터',
       href: '/items',
+    });
+  }
+
+  if (canAccessAsn(role)) {
+    menus.push({
+      label: '입고 예정',
+      description: '지사 간 입고 신청·관리',
+      href: '/asn',
     });
   }
 

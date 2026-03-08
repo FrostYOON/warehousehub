@@ -2,6 +2,7 @@
 
 import { AuthSessionProvider, useAuthSessionContext } from '@/features/auth/context/auth-session-context';
 import {
+  canAccessAsn,
   canAccessBranches,
   canAccessDashboard,
   canAccessInbound,
@@ -25,6 +26,7 @@ const TEMPERATURE_MONITOR_PATH = '/temperature-monitor';
 const STOCKTAKING_PATH = '/stocktaking';
 const TRANSFERS_PATH = '/transfers';
 const BRANCHES_PATH = '/branches';
+const ASN_PATH = '/asn';
 const STOCKS_PATH = '/stocks';
 const STOCKS_MANAGE_PATH = '/stocks/manage';
 
@@ -96,6 +98,11 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
     }
 
     if (pathname === BRANCHES_PATH && !canAccessBranches(role)) {
+      router.replace('/stocks');
+      return;
+    }
+
+    if ((pathname === ASN_PATH || pathname.startsWith('/asn/')) && !canAccessAsn(role)) {
       router.replace('/stocks');
       return;
     }
