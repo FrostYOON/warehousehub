@@ -28,22 +28,20 @@ export function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6">
+    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8 sm:px-6">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"
+        className="modal-form-card max-w-md space-y-4"
       >
-        <h1 className="text-center text-xl font-semibold sm:text-2xl">Login</h1>
+        <h1 className="page-title text-center text-xl sm:text-2xl">Login</h1>
 
         <div className="space-y-1">
-          <label htmlFor="login-company" className="text-sm font-medium text-slate-700">
-            Company
-          </label>
+          <label htmlFor="login-company" className="form-label">Company</label>
           <select
             id="login-company"
             aria-label="로그인할 회사 선택"
             aria-busy={companiesLoading}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-select-lg"
             value={companyName}
             onChange={(e) => setCompanyName(e.target.value)}
             disabled={submitting || companiesLoading || companies.length === 0}
@@ -63,14 +61,12 @@ export function LoginForm() {
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="login-email" className="text-sm font-medium text-slate-700">
-            Email
-          </label>
+          <label htmlFor="login-email" className="form-label">Email</label>
           <input
             id="login-email"
             aria-label="이메일"
             aria-busy={submitting}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-input-lg"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={submitting}
@@ -79,15 +75,13 @@ export function LoginForm() {
         </div>
 
         <div className="space-y-1">
-          <label htmlFor="login-password" className="text-sm font-medium text-slate-700">
-            Password
-          </label>
+          <label htmlFor="login-password" className="form-label">Password</label>
           <input
             id="login-password"
             type="password"
             aria-label="비밀번호"
             aria-busy={submitting}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            className="form-input-lg"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={submitting}
@@ -109,7 +103,7 @@ export function LoginForm() {
           disabled={submitting || companiesLoading || companies.length === 0}
           aria-busy={submitting}
           aria-disabled={submitting || companiesLoading || companies.length === 0}
-          className="h-11 w-full rounded-lg bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+          className="btn-primary h-11 w-full"
         >
           {submitting ? 'Signing in...' : 'Sign in'}
         </button>
