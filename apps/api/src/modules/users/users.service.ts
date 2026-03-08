@@ -33,7 +33,10 @@ export class UsersService {
   }
 
   async findCompanyByName(name: string) {
-    return this.prisma.company.findUnique({ where: { name } });
+    return this.prisma.company.findUnique({
+      where: { name },
+      select: { id: true, name: true },
+    });
   }
 
   async createCompanyWithAdmin(params: {
@@ -44,6 +47,7 @@ export class UsersService {
   }) {
     const existingCompany = await this.prisma.company.findUnique({
       where: { name: params.companyName },
+      select: { id: true },
     });
     if (existingCompany) throw new ConflictException('Company already exists');
 
