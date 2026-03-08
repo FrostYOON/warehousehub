@@ -4,6 +4,7 @@ import { AuthSessionProvider, useAuthSessionContext } from '@/features/auth/cont
 import {
   canAccessAsn,
   canAccessBranches,
+  canAccessCost,
   canAccessDashboard,
   canAccessInbound,
   canAccessMembers,
@@ -29,6 +30,7 @@ const BRANCHES_PATH = '/branches';
 const ASN_PATH = '/asn';
 const STOCKS_PATH = '/stocks';
 const STOCKS_MANAGE_PATH = '/stocks/manage';
+const COST_PATH = '/cost';
 
 function getDefaultRedirectPath(role?: string): string {
   if (canAccessDashboard(role as Parameters<typeof canAccessDashboard>[0])) {
@@ -103,6 +105,11 @@ function ProtectedContent({ children }: { children: React.ReactNode }) {
     }
 
     if ((pathname === ASN_PATH || pathname.startsWith('/asn/')) && !canAccessAsn(role)) {
+      router.replace('/stocks');
+      return;
+    }
+
+    if (pathname === COST_PATH && !canAccessCost(role)) {
       router.replace('/stocks');
       return;
     }

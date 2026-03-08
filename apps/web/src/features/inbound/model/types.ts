@@ -17,6 +17,7 @@ export type InboundUploadRow = {
   storageType: 'DRY' | 'COOL' | 'FRZ';
   quantity: number;
   expiryDate: string | null;
+  unitCost?: number | null;
   isValid: boolean;
   errorMessage: string | null;
 };

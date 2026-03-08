@@ -26,6 +26,7 @@ import { TransfersModule } from './modules/transfers/transfers.module';
 import { AsnModule } from './modules/asn/asn.module';
 import { TraceabilityModule } from './modules/traceability/traceability.module';
 import { StocktakingModule } from './modules/stocktaking/stocktaking.module';
+import { CostModule } from './modules/cost/cost.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { StocktakingModule } from './modules/stocktaking/stocktaking.module';
     AsnModule,
     TraceabilityModule,
     StocktakingModule,
+    CostModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
